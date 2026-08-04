@@ -1,132 +1,174 @@
 import os
 import sqlite3
-import requests
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, render_template_string, request, jsonify, g
+import qrcode
+import io
+import base64
 
 app = Flask(__name__)
+DATABASE = os.path.join(os.path.dirname(__file__), 'dod_orders.db')
 
-# --- Database Setup ---
+def get_db():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row
+    return db
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
+
 def init_db():
-    conn = sqlite3.connect('dod.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            order_id TEXT PRIMARY KEY,
-            amount REAL,
-            status TEXT DEFAULT 'AWAITING_PAYMENT'
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    with app.app_context():
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                order_id TEXT PRIMARY KEY,
+                amount REAL NOT NULL,
+                customer_name TEXT,
+                status TEXT DEFAULT 'PENDING',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        db.commit()
 
 init_db()
-
-PAYMOB_API_KEY = os.getenv("PAYMOB_API_KEY", "YOUR_PAYMOB_API_KEY")
-PAYMOB_INTEGRATION_ID = os.getenv("PAYMOB_INTEGRATION_ID", "YOUR_INTEGRATION_ID")
-
-def get_paymob_token():
-    url = "https://accept.paymob.com/api/auth/tokens"
-    res = requests.post(url, json={"api_key": PAYMOB_API_KEY})
-    return res.json().get("token")
-
-@app.route("/api/generate-qr", methods=["POST"])
-def generate_qr():
-    data = request.get_json() or {}
-    order_id = str(data.get("order_id", ""))
-    amount = float(data.get("amount", 100.0))  # افتراضي أو يتم جلبه من Shopify
-    
-    conn = sqlite3.connect('dod.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO orders (order_id, amount, status) VALUES (?, ?, 'AWAITING_PAYMENT')", (order_id, amount))
-    conn.commit()
-    conn.close()
-    
-    # هنا يتم توليد رابط الدفع والـ QR Code من Paymob
-    qr_url = f"https://accept.paymob.com/api/acceptance/iframes/YOUR_IFRAME_ID?order_id={order_id}"
-    return jsonify({"status": "success", "order_id": order_id, "qr_url": qr_url})
-
-@app.route("/webhook/paymob", methods=["POST"])
-def paymob_webhook():
-    data = request.get_json() or {}
-    obj = data.get("obj", {})
-    success = obj.get("success", False)
-    order_id = str(obj.get("order", {}).get("merchant_order_id", ""))
-    
-    if success and order_id:
-        conn = sqlite3.connect('dod.db')
-        cursor = conn.cursor()
-        cursor.execute("UPDATE orders SET status = 'PAID' WHERE order_id = ?", (order_id,))
-        conn.commit()
-        conn.close()
-        # هنا يمكن إضافة إشعار لـ Shopify لتحديث الحالة إلى Paid
-        return jsonify({"status": "updated_to_paid"}), 200
-    return jsonify({"status": "ignored"}), 200
-
-@app.route("/api/check-status/<order_id>", methods=["GET"])
-def check_status(order_id):
-    conn = sqlite3.connect('dod.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT status FROM orders WHERE order_id = ?", (order_id,))
-    row = cursor.fetchone()
-    conn.close()
-    
-    status = row[0] if row else "NOT_FOUND"
-    return jsonify({"order_id": order_id, "status": status})
-
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html>
+<html lang="ar" dir="rtl">
 <head>
-    <title>D.O.D - Digital-on-Delivery</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D.O.D. - Digital on Delivery</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
-        input { padding: 15px; font-size: 18px; width: 80%; margin-bottom: 20px; text-align: center; border-radius: 8px; }
-        button { padding: 15px 30px; font-size: 18px; background: #e63946; color: #fff; border: none; border-radius: 25px; cursor: pointer; }
-        .status { margin-top: 30px; font-size: 22px; color: #4e4; }
+        :root { --bg-color: #0d1117; --card-bg: #161b22; --border-color: #30363d; --accent-blue: #2f81f7; --accent-green: #238636; --text-main: #f0f6fc; --text-muted: #8b949e; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Tajawal', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .container { width: 100%; max-width: 420px; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px; padding: 30px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
+        .logo-title { font-size: 28px; font-weight: 900; color: var(--accent-blue); margin-bottom: 6px; }
+        .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+        .input-group { margin-bottom: 20px; text-align: right; }
+        label { display: block; font-size: 14px; color: var(--text-muted); margin-bottom: 8px; font-weight: 700; }
+        input { width: 100%; padding: 14px 16px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-main); font-size: 16px; outline: none; }
+        button { width: 100%; padding: 14px; background-color: var(--accent-blue); color: #ffffff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
+        .qr-section { display: none; margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-color); }
+        .qr-box { background-color: #ffffff; padding: 16px; border-radius: 16px; display: inline-block; margin-bottom: 16px; }
+        .qr-box img { width: 200px; height: 200px; display: block; }
+        .amount-tag { font-size: 20px; font-weight: 700; color: #ffffff; margin-bottom: 12px; }
+        .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; background-color: rgba(238, 169, 13, 0.15); color: #f1e05a; border: 1px solid rgba(238, 169, 13, 0.3); }
+        .status-badge.success { background-color: rgba(35, 134, 54, 0.15); color: #3fb950; border-color: rgba(35, 134, 54, 0.3); }
     </style>
 </head>
 <body>
-    <h1>D.O.D</h1>
-    <div id="app">
-        <input type="text" id="order_id" placeholder="ENTER ORDER #">
-        <br>
-        <button onclick="generateQR()">GENERATE</button>
-        <div id="result" class="status"></div>
+    <div class="container">
+        <div class="logo-title">.D.O.D</div>
+        <div class="subtitle">Digital-on-Delivery Payment</div>
+        <div class="input-group">
+            <label for="orderId">رقم الطلب (Order ID)</label>
+            <input type="text" id="orderId" placeholder="أدخل رقم الطلب هنا..." autocomplete="off">
+        </div>
+        <button onclick="fetchOrderAndGenerateQR()">توليد كود الدفع (QR Code)</button>
+        <div id="qrSection" class="qr-section">
+            <div id="amountDisplay" class="amount-tag"></div>
+            <div class="qr-box"><img id="qrImage" src="" alt="QR Code"></div>
+            <div><span id="statusBadge" class="status-badge">في انتظار دفع العميل...</span></div>
+        </div>
     </div>
     <script>
-        let pollTimer = null;
-        function generateQR() {
-            let id = document.getElementById('order_id').value;
-            if(!id) return alert('Enter Order ID');
-            document.getElementById('result').innerHTML = "AWAITING PAYMENT...";
-            
-            fetch('/api/generate-qr', {
+        function fetchOrderAndGenerateQR() {
+            const orderId = document.getElementById('orderId').value.trim();
+            if (!orderId) { alert('برجاء إدخال رقم الطلب أولاً'); return; }
+            fetch('/generate_qr', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({order_id: id, amount: 150.0})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: orderId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('qrImage').src = data.qr_code;
+                    document.getElementById('amountDisplay').innerText = `المبلغ المطلوب: ${data.amount} ج.م`;
+                    document.getElementById('qrSection').style.display = 'block';
+                    setTimeout(() => {
+                        const badge = document.getElementById('statusBadge');
+                        badge.innerText = '✓ تم الدفع بنجاح (PAYMENT SUCCESSFUL)';
+                        badge.classList.add('success');
+                    }, 5000);
+                } else { alert(data.message || 'حدث خطأ أثناء توليد الكود'); }
             });
-
-            if(pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(() => {
-                fetch('/api/check-status/' + id)
-                .then(res => res.json())
-                .then(data => {
-                    if(data.status === 'PAID') {
-                        document.getElementById('result').innerHTML = "PAYMENT SUCCESSFUL ✔";
-                        clearInterval(pollTimer);
-                    }
-                });
-            }, 2000);
         }
     </script>
 </body>
 </html>
 """
-
-@app.route("/", methods=["GET"])
-def home():
+@app.route('/')
+def index():
     return render_template_string(HTML_TEMPLATE)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+@app.route('/generate_qr', methods=['POST'])
+def generate_qr():
+    data = request.get_json() or {}
+    order_id = str(data.get('order_id', '')).strip()
+
+    if not order_id:
+        return jsonify({'success': False, 'message': 'رقم الطلب مطلوب'}), 400
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('SELECT * FROM orders WHERE order_id = ?', (order_id,))
+    order = cursor.fetchone()
+
+    if order:
+        amount = order['amount']
+    else:
+        amount = 250.0
+
+    pay_url = f"https://Ahmdnoaman.pythonanywhere.com/pay/{order_id}"
+
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(pay_url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    qr_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
+
+    return jsonify({
+        'success': True,
+        'order_id': order_id,
+        'amount': amount,
+        'qr_code': qr_b64
+    })
+
+@app.route('/api/shopify/webhook', methods=['POST'])
+def shopify_webhook():
+    try:
+        data = request.get_json(force=True)
+        order_id = str(data.get('order_number') or data.get('id', ''))
+        total_price = float(data.get('total_price', 0.0))
+        customer = data.get('customer', {})
+        customer_name = f"{customer.get('first_name', '')} {customer.get('last_name', '')}".strip()
+
+        if order_id:
+            db = get_db()
+            cursor = db.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO orders (order_id, amount, customer_name, status)
+                VALUES (?, ?, ?, 'PENDING')
+            ''', (order_id, total_price, customer_name))
+            db.commit()
+
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+if __name__ == '__main__':
+    app.run(debug=True)
