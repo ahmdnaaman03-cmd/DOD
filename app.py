@@ -1,20 +1,50 @@
 import os
 import requests
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, jsonify, request
+from dotenv import load_dotenv
+
+# تحميل المتغيرات من ملف .env
+load_dotenv()
 
 app = Flask(__name__)
 
-SHOPIFY_DOMAIN = os.environ.get("SHOPIFY_DOMAIN", "aman-test-store.myshopify.com")
-SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "shpat_xxxxxxxxxxxxxxxxxxxxxxxx")
+SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL")
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 
-orders_db = {}
+headers = {
+    "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+    "Content-Type": "application/json"
+}
 
-def update_shopify_paid(shopify_id, amount):
-    url = f"https://{SHOPIFY_DOMAIN}/admin/api/2026-07/orders/{shopify_id}/transactions.json"
-    headers = {
-        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-        "Content-Type": "application/json"
-    }
+@app.route('/')
+def home():
+    return jsonify({"status": "PayDoD API is running", "store": SHOPIFY_STORE_URL})
+
+@app.route('/get-order/<order_name>', methods=['GET'])
+def get_order(order_name):
+    url = f"https://{SHOPIFY_STORE_URL}/admin/api/2024-01/orders.json?name={order_name}"
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code == 200:
+        orders = response.json().get('orders', [])
+        if orders:
+            order = orders[0]
+            return jsonify({
+                "success": True,
+                "shopify_order_id": order['id'],
+                "order_name": order['name'],
+                "total_price": order['total_price'],
+                "financial_status": order['financial_status']
+            })
+    return jsonify({"success": False, "message": "الطلب غير موجود"}), 404
+
+@app.route('/mark-as-paid', methods=['POST'])
+def mark_as_paid():
+    data = request.json or {}
+    shopify_order_id = data.get('shopify_order_id')
+    amount = data.get('amount')
+    
+    url = f"https://{SHOPIFY_STORE_URL}/admin/api/2024-01/orders/{shopify_order_id}/transactions.json"
     payload = {
         "transaction": {
             "kind": "capture",
@@ -22,47 +52,12 @@ def update_shopify_paid(shopify_id, amount):
             "amount": str(amount)
         }
     }
-    try:
-        res = requests.post(url, json=payload, headers=headers, timeout=5)
-        return res.status_code == 201
-    except Exception as e:
-        print("Shopify Error:", e)
-        return False
-
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-@app.route('/api/shopify/webhook', methods=['POST'])
-def shopify_webhook():
-    data = request.get_json() or {}
-    if 'id' in data:
-        order_num = str(data.get('order_number') or data.get('name', '')).replace('#', '').strip()
-        orders_db[order_num] = {
-            "shopify_id": data.get('id'),
-            "amount": data.get('total_price', '0.00')
-        }
-    return jsonify({"status": "ok"}), 200
-
-@app.route('/api/get-order', methods=['POST'])
-def get_order():
-    data = request.get_json() or {}
-    order_id = str(data.get('order_id', '')).replace('#', '').strip()
     
-    if order_id in orders_db:
-        return jsonify({"success": True, "amount": orders_db[order_id]["amount"]})
-    return jsonify({"success": True, "amount": "949.95"})
-
-@app.route('/api/confirm-payment', methods=['POST'])
-def confirm_payment():
-    data = request.get_json() or {}
-    order_id = str(data.get('order_id', '')).replace('#', '').strip()
-    amount = data.get('amount', '949.95')
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code in [200, 201]:
+        return jsonify({"success": True, "message": "تم تحديث حالة الدفع إلى Paid بنجاح!"})
     
-    if order_id in orders_db:
-        update_shopify_paid(orders_db[order_id]["shopify_id"], amount)
-        
-    return jsonify({"success": True})
+    return jsonify({"success": False, "error": response.json()}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
