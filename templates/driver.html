@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayDOD - Driver Portal</title>
+    <style>
+        body { background-color: #0A0F1D; color: #FFF; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #131B2E; padding: 24px; border-radius: 16px; width: 340px; border: 1px solid rgba(0,191,255,0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.4); text-align: center; }
+        h1 { font-size: 26px; margin-bottom: 20px; }
+        span.pay { color: #FFF; }
+        span.dod { background: linear-gradient(90deg, #8A2BE2, #00BFFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        input { width: 100%; padding: 12px; background: #0A0F1D; border: 1px solid #2A3B5C; color: #FFF; border-radius: 8px; margin-bottom: 12px; box-sizing: border-box; font-size: 16px; text-align: center; }
+        button { width: 100%; padding: 12px; background: linear-gradient(90deg, #8A2BE2, #00BFFF); border: none; color: #FFF; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 16px; }
+        .result { margin-top: 15px; display: none; background: #0A0F1D; padding: 16px; border-radius: 8px; border-right: 4px solid #00BFFF; text-align: right; }
+        .qr-box { margin-top: 15px; text-align: center; }
+        .qr-box img { width: 180px; height: 180px; border-radius: 8px; border: 2px solid #00BFFF; }
+        .success-box { background: rgba(0, 255, 102, 0.1); border: 2px solid #00FF66; padding: 20px; border-radius: 12px; color: #00FF66; margin-top: 15px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1><span class="pay">Pay</span><span class="dod">DOD</span></h1>
+        <div id="searchSection">
+            <input type="text" id="orderId" placeholder="أدخل رقم الشحنة (مثال: 1001)">
+            <button onclick="fetchOrder()">توليد QR الدفع</button>
+        </div>
+
+        <div id="res" class="result">
+            <p style="margin: 5px 0;"><strong>العميل:</strong> <span id="cName"></span></p>
+            <p style="margin: 5px 0;"><strong>المبلغ المطلوب:</strong> <span id="cAmount" style="color: #00BFFF; font-weight: bold;"></span></p>
+            <div class="qr-box">
+                <img id="qrImg" src="" alt="Payment QR Code">
+                <p style="font-size: 12px; color: #888; margin-top: 8px;">اطلب من العميل مسح الـ QR للدفع</p>
+            </div>
+        </div>
+
+        <div id="successBox" class="success-box">
+            <h2 style="margin:0; font-size:22px;">✓ تم الدفع بنجاح</h2>
+            <p style="color:#FFF; margin:10px 0 0 0;">تم تأكيد المعاملة من السيرفر وإغلاق الطلب.</p>
+        </div>
+    </div>
+    <script>
+        let checkInterval = null;
+
+        async function fetchOrder() {
+            let id = document.getElementById('orderId').value;
+            if(!id) return;
+            let res = await fetch('/api/get', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({order_id: id}) });
+            let data = await res.json();
+            if(data.status === 'success') {
+                document.getElementById('cName').innerText = data.customer_name;
+                document.getElementById('cAmount').innerText = '$' + data.amount;
+                
+                let qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.payment_link)}`;
+                document.getElementById('qrImg').src = qrUrl;
+                
+                document.getElementById('res').style.display = 'block';
+                document.getElementById('successBox').style.display = 'none';
+
+                startCheckingPayment(id);
+            } else {
+                alert('الشحنة غير موجودة');
+            }
+        }
+
+        function startCheckingPayment(orderId) {
+            if(checkInterval) clearInterval(checkInterval);
+            
+            checkInterval = setInterval(async () => {
+                let res = await fetch('/api/check_status?order_id=' + orderId);
+                let data = await res.json();
+                if(data.status === 'PAID') {
+                    clearInterval(checkInterval);
+                    document.getElementById('res').style.display = 'none';
+                    document.getElementById('searchSection').style.display = 'none';
+                    document.getElementById('successBox').style.display = 'block';
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

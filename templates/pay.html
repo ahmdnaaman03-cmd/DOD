@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayDOD - بوابة الدفع</title>
+    <style>
+        body { background-color: #0A0F1D; color: #FFF; font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #131B2E; padding: 30px; border-radius: 16px; width: 320px; border: 1px solid rgba(0,191,255,0.2); text-align: center; }
+        .amount { font-size: 32px; color: #00BFFF; font-weight: bold; margin: 15px 0; }
+        .btn { width: 100%; padding: 14px; background: linear-gradient(90deg, #8A2BE2, #00BFFF); border: none; color: #FFF; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 16px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>سداد شحنة PayDOD</h2>
+        <p>رقم الطلب: <strong>{{ order_id }}</strong></p>
+        <p>اسم العميل: <strong>{{ customer_name }}</strong></p>
+        <div class="amount">${{ amount }}</div>
+        <button class="btn" onclick="simulatePayment('{{ order_id }}')">تأكيد الدفع الان (Simulate Payment Gateway)</button>
+    </div>
+
+    <script>
+        async function simulatePayment(orderId) {
+            let res = await fetch('/webhook/payment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ order_id: orderId, status: 'PAID', gateway_secret: 'SECURE_KEY_123' })
+            });
+            let data = await res.json();
+            if(data.status === 'success') {
+                alert('تم الدفع بنجاح! سيتم إغلاق الطلب لدى المندوب وتحديث المتجر فوراً.');
+                window.close();
+            }
+        }
+    </script>
+</body>
+</html>

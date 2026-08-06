@@ -1,25 +1,29 @@
-from flask import Flask, render_template, jsonify
+"""
+PayDOD Core Engine - Part 1: Setup & Database
+Production-ready backend core built for high performance and mobile execution.
+"""
+
+from flask import Flask, request, jsonify, render_template_string
 import sqlite3
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    conn = sqlite3.connect('database/dod_orders.db')
+def init_db():
+    """Initialize SQLite database and seed test data."""
+    conn = sqlite3.connect('paydod.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM orders;")
-    orders = cursor.fetchall()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS shipments (
+            order_id TEXT PRIMARY KEY,
+            customer_name TEXT,
+            amount REAL,
+            status TEXT DEFAULT 'Pending'
+        )
+    ''')
+    # Seed initial test record matching brand flow
+    cursor.execute("INSERT OR IGNORE INTO shipments VALUES ('1001', 'John Doe', 350.00, 'Pending')")
+    conn.commit()
     conn.close()
-    return render_template('index.html', orders=orders)
 
-@app.route('/api/orders')
-def api_orders():
-    conn = sqlite3.connect('database/dod_orders.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM orders;")
-    orders = cursor.fetchall()
-    conn.close()
-    return jsonify({"orders": orders})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Initialize the database upon module load
+init_db()
