@@ -3,50 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>أمان المندوب</title>
+    <title>PayDoD</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
-        body { font-family: Tahoma, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; text-align: center; }
-        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        input, button { width: 100%; padding: 12px; margin: 10px 0; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background: #28a745; color: white; border: none; cursor: pointer; font-weight: bold; }
-        #qrcode { margin: 20px auto; display: flex; justify-content: center; }
+        body { font-family: Tahoma, sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 20px; text-align: center; }
+        .box { max-width: 380px; margin: 40px auto; background: #1e293b; padding: 20px; border-radius: 12px; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; font-size: 16px; border-radius: 8px; border: none; box-sizing: border-box; }
+        input { background: #0f172a; color: #fff; border: 1px solid #475569; text-align: center; }
+        .btn-p { background: #38bdf8; color: #0f172a; font-weight: bold; }
+        .btn-s { background: #22c55e; color: #fff; font-weight: bold; }
         .hidden { display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>تحصيل شحنة (أمان المندوب)</h2>
-        <input type="text" id="orderId" placeholder="أدخل رقم الطلب">
-        <button onclick="getShipment()">توليد QR الدفع</button>
-        <div id="result" class="hidden">
-            <p><strong>العميل:</strong> <span id="cName"></span></p>
-            <p><strong>المبلغ:</strong> <span id="cAmount"></span></p>
-            <div id="qrcode"></div>
-            <button id="payBtn" onclick="payOrder()" style="background: #007bff;">تأكيد الدفع</button>
+    <div class="box">
+        <h2>PayDoD 🚀</h2>
+        <input type="text" id="orderId" placeholder="رقم الشحنة (مثال: 1012)">
+        <button class="btn-p" onclick="getShipment()">توليد QR</button>
+        <div id="res" class="hidden">
+            <p>العميل: <span id="cName"></span></p>
+            <p>المبلغ: <span id="cAmount"></span> ج.م</p>
+            <div id="qrcode" style="background:#fff; padding:10px; border-radius:8px; margin:15px 0;"></div>
+            <button class="btn-s" onclick="payOrder()">تأكيد الدفع</button>
         </div>
     <script>
-        let currentOrderId = null; let currentAmount = 0;
+        let oId = null, oAmt = 0;
         async function getShipment() {
             let id = document.getElementById('orderId').value.trim();
-            if(!id) return alert('أدخل رقم الطلب');
+            if(!id) return alert('أدخل الرقم');
             let res = await fetch(`/api/get-shipment?id=${id}`);
-            let data = await res.json();
-            if(data.success) {
-                currentOrderId = data.shopify_order_id; currentAmount = data.amount;
-                document.getElementById('cName').innerText = data.customer_name;
-                document.getElementById('cAmount').innerText = data.amount;
+            let d = await res.json();
+            if(d.success) {
+                oId = d.shopify_order_id; oAmt = d.amount;
+                document.getElementById('cName').innerText = d.customer_name;
+                document.getElementById('cAmount').innerText = d.amount;
                 document.getElementById('qrcode').innerHTML = "";
-                let qr = qrcode(0, 'L'); qr.addData(`AmanPay:${currentOrderId}`); qr.make();
+                let qr = qrcode(0, 'L'); qr.addData(`PayDoD:${oId}:${oAmt}`); qr.make();
                 document.getElementById('qrcode').innerHTML = qr.createImgTag(5);
-                document.getElementById('result').classList.remove('hidden');
-            } else { alert(data.message); }
+                document.getElementById('res').classList.remove('hidden');
+            } else { alert(d.message || 'خطأ'); }
         }
         async function payOrder() {
-            let res = await fetch('/api/pay', { method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ shopify_order_id: currentOrderId, amount: currentAmount }) });
-            let data = await res.json();
-            if(data.success) { alert('تم الدفع بنجاح!'); location.reload(); } else { alert('فشل: ' + data.message); }
+            let res = await fetch('/api/pay', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ shopify_order_id: oId, amount: oAmt })
+            });
+            let d = await res.json();
+            if(d.success) { alert('تم الدفع بنجاح!'); location.reload(); }
+            else { alert('فشل: ' + d.message); }
         }
     </script>
 </body>
