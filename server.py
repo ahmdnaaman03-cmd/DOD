@@ -1,6 +1,6 @@
 import os
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
@@ -14,11 +14,11 @@ HEADERS = {
 
 @app.route('/')
 def home():
-    return app.send_static_file('driver.html')
+    return send_from_directory('.', 'driver.html')
 
 @app.route('/pay')
 def pay_page():
-    return app.send_static_file('pay.html')
+    return send_from_directory('.', 'pay.html')
 
 @app.route('/api/get-shipment', methods=['GET'])
 def get_shipment():
