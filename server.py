@@ -1,73 +1,77 @@
-from flask import Flask, request, jsonify, render_template
-import sqlite3
+import os
+import requests
+from flask import Flask, request, jsonify
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 
-def init_db():
-    conn = sqlite3.connect('paydod.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS shipments 
-                 (order_id TEXT PRIMARY KEY, customer_name TEXT, amount REAL, status TEXT, shopify_order_id TEXT)''')
-    c.execute("INSERT OR REPLACE INTO shipments VALUES ('1001', 'John Doe', 350.0, 'PENDING', '55443322')")
-    conn.commit()
-    conn.close()
+SHOPIFY_STORE = os.getenv("SHOPIFY_STORE_URL", "aman-test-store.myshopify.com")
+SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "shpat_xxxxxxxxxxxxxxxxxxxxxxxx")
 
-init_db()
+HEADERS = {
+    "X-Shopify-Access-Token": SHOPIFY_TOKEN,
+    "Content-Type": "application/json"
+}
 
 @app.route('/')
-def index():
-    return render_template('driver.html')
+def home():
+    return app.send_static_file('driver.html')
 
 @app.route('/pay')
-def pay():
-    order_id = request.args.get('id')
-    conn = sqlite3.connect('paydod.db')
-    c = conn.cursor()
-    c.execute("SELECT customer_name, amount FROM shipments WHERE order_id = ?", (order_id,))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        return render_template('pay.html', order_id=order_id, customer_name=row[0], amount=row[1])
-    return "Order Not Found", 404
-@app.route('/api/get', methods=['POST'])
-def get_order():
-    data = request.json
-    conn = sqlite3.connect('paydod.db')
-    c = conn.cursor()
-    c.execute("SELECT customer_name, amount, status FROM shipments WHERE order_id = ?", (data.get('order_id'),))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        pay_url = f"{request.host_url}pay?id={data.get('order_id')}"
-        return jsonify({"status": "success", "customer_name": row[0], "amount": row[1], "payment_link": pay_url})
-    return jsonify({"status": "error"}), 404
+def pay_page():
+    return app.send_static_file('pay.html')
 
-@app.route('/api/check_status')
-def check_status():
-    order_id = request.args.get('order_id')
-    conn = sqlite3.connect('paydod.db')
-    c = conn.cursor()
-    c.execute("SELECT status FROM shipments WHERE order_id = ?", (order_id,))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        return jsonify({"status": row[0]})
-    return jsonify({"status": "NOT_FOUND"}), 404
-
-@app.route('/webhook/payment', methods=['POST'])
-def payment_webhook():
-    data = request.json
-    order_id = data.get('order_id')
-    status = data.get('status')
+@app.route('/api/get-shipment', methods=['GET'])
+def get_shipment():
+    order_name = request.args.get('id')
+    if not order_name:
+        return jsonify({"success": False, "message": "رقم الطلب مطلوب"}), 400
     
-    if status == 'PAID':
-        conn = sqlite3.connect('paydod.db')
-        c = conn.cursor()
-        c.execute("UPDATE shipments SET status = 'PAID' WHERE order_id = ?", (order_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"status": "success", "message": "Order status updated to PAID"}), 200
-    return jsonify({"status": "ignored"}), 400
+    formatted_name = f"#{order_name}" if not order_name.startswith("#") else order_name
+    url = f"https://{SHOPIFY_STORE}/admin/api/2024-01/orders.json?name={formatted_name}&status=any"
+    
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 200:
+            orders = res.json().get('orders', [])
+            if orders:
+                order = orders[0]
+                cust = order.get('customer', {})
+                c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "عميل متجر"
+                total = float(order.get('total_price', 0.0))
+                status = order.get('financial_status', 'pending')
+                return jsonify({
+                    "success": True,
+                    "shopify_order_id": order['id'],
+                    "order_number": order_name,
+                    "customer_name": c_name,
+                    "amount": total,
+                    "status": "PAID" if status == "paid" else "PENDING"
+                })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+        
+    return jsonify({"success": False, "message": "الطلب غير موجود في Shopify"}), 404
+
+@app.route('/api/pay', methods=['POST'])
+def pay_shipment():
+    data = request.json or {}
+    order_id = data.get('shopify_order_id')
+    amount = data.get('amount')
+
+    if not order_id:
+        return jsonify({"success": False, "message": "بيانات غير مكتملة"}), 400
+
+    url = f"https://{SHOPIFY_STORE}/admin/api/2024-01/orders/{order_id}/transactions.json"
+    payload = {"transaction": {"kind": "capture", "status": "success", "amount": amount}}
+    
+    try:
+        res = requests.post(url, json=payload, headers=HEADERS, timeout=10)
+        if res.status_code in [200, 201]:
+            return jsonify({"success": True, "message": "تم التحديث لـ Paid بنجاح!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+    return jsonify({"success": False, "message": "فشل التحديث في Shopify"}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
