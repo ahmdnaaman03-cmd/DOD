@@ -4,8 +4,8 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
-# قراءة البيانات من البيئة بدون الحاجة لـ SQLite
-SHOPIFY_STORE = os.getenv("SHOPIFY_STORE_URL", "aman-test-store.myshopify.com")
+API_VERSION = "2025-01" 
+SHOPIFY_STORE = "aman-test-store-c9korns0.myshopify.com"
 SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
 
 HEADERS = {
@@ -17,39 +17,29 @@ HEADERS = {
 def home():
     return render_template('driver.html')
 
-@app.route('/pay')
-def pay_page():
-    return render_template('pay.html')
-
 @app.route('/api/get-shipment', methods=['GET'])
 def get_shipment():
-    order_name = request.args.get('id')
-    if not order_name:
-        return jsonify({"success": False, "message": "رقم الطلب مطلوب"}), 400
-    
-    formatted_name = f"#{order_name}" if not order_name.startswith("#") else order_name
-    url = f"https://{SHOPIFY_STORE}/admin/api/2024-01/orders.json?name={formatted_name}&status=any"
-    
+    order_name = request.args.get('id', '').strip()
+    clean_name = order_name.replace('#', '')
+    url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/orders.json?name=%23{clean_name}&status=any"
     try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
+        res = requests.get(url, headers=HEADERS)
         if res.status_code == 200:
             orders = res.json().get('orders', [])
+            if not orders:
+                url2 = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/orders.json?name={clean_name}&status=any"
+                res = requests.get(url2, headers=HEADERS)
+                orders = res.json().get('orders', [])
             if orders:
                 order = orders[0]
                 cust = order.get('customer', {})
-                c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "عميل متجر"
-                total = float(order.get('total_price', 0.0))
-                status = order.get('financial_status', 'pending')
+                c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "عميل"
                 return jsonify({
-                    "success": True,
-                    "shopify_order_id": order['id'],
-                    "order_number": order_name,
-                    "customer_name": c_name,
-                    "amount": total,
-                    "status": "PAID" if status == "paid" else "PENDING"
+                    "success": True, "shopify_order_id": order['id'],
+                    "customer_name": c_name, "amount": order.get('total_price', 0)
                 })
-            return jsonify({"success": False, "message": "الطلب غير موجود في Shopify"}), 404
-        return jsonify({"success": False, "message": f"خطأ من شوبيفاي: {res.status_code}"}), res.status_code
+            return jsonify({"success": False, "message": "الطلب غير موجود"}), 404
+        return jsonify({"success": False, "message": f"خطأ: {res.status_code}"}), res.status_code
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -58,20 +48,12 @@ def pay_shipment():
     data = request.json or {}
     order_id = data.get('shopify_order_id')
     amount = data.get('amount')
-
-    if not order_id:
-        return jsonify({"success": False, "message": "بيانات غير مكتملة"}), 400
-
-    url = f"https://{SHOPIFY_STORE}/admin/api/2024-01/orders/{order_id}/transactions.json"
+    url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/orders/{order_id}/transactions.json"
     payload = {"transaction": {"kind": "capture", "status": "success", "amount": amount}}
-    
-    try:
-        res = requests.post(url, json=payload, headers=HEADERS, timeout=10)
-        if res.status_code in [200, 201]:
-            return jsonify({"success": True, "message": "تم التحديث لـ Paid بنجاح!"})
-        return jsonify({"success": False, "message": "فشل التحديث في Shopify"}), res.status_code
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
+    res = requests.post(url, json=payload, headers=HEADERS)
+    if res.status_code in [200, 201]:
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": "فشل الاتصال بـ شوبيفاي"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
