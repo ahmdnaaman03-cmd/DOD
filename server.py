@@ -1,8 +1,8 @@
 import os
 import requests
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__)
 
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE_URL", "aman-test-store.myshopify.com")
 SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "shpat_xxxxxxxxxxxxxxxxxxxxxxxx")
@@ -14,11 +14,11 @@ HEADERS = {
 
 @app.route('/')
 def home():
-    return send_from_directory('.', 'driver.html')
+    return render_template('driver.html')
 
 @app.route('/pay')
 def pay_page():
-    return send_from_directory('.', 'pay.html')
+    return render_template('pay.html')
 
 @app.route('/api/get-shipment', methods=['GET'])
 def get_shipment():
