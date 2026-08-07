@@ -4,8 +4,9 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
+# قراءة البيانات من البيئة بدون الحاجة لـ SQLite
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE_URL", "aman-test-store.myshopify.com")
-SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "shpat_xxxxxxxxxxxxxxxxxxxxxxxx")
+SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
 
 HEADERS = {
     "X-Shopify-Access-Token": SHOPIFY_TOKEN,
@@ -47,10 +48,10 @@ def get_shipment():
                     "amount": total,
                     "status": "PAID" if status == "paid" else "PENDING"
                 })
+            return jsonify({"success": False, "message": "الطلب غير موجود في Shopify"}), 404
+        return jsonify({"success": False, "message": f"خطأ من شوبيفاي: {res.status_code}"}), res.status_code
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
-        
-    return jsonify({"success": False, "message": "الطلب غير موجود في Shopify"}), 404
 
 @app.route('/api/pay', methods=['POST'])
 def pay_shipment():
@@ -68,10 +69,9 @@ def pay_shipment():
         res = requests.post(url, json=payload, headers=HEADERS, timeout=10)
         if res.status_code in [200, 201]:
             return jsonify({"success": True, "message": "تم التحديث لـ Paid بنجاح!"})
+        return jsonify({"success": False, "message": "فشل التحديث في Shopify"}), res.status_code
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
-
-    return jsonify({"success": False, "message": "فشل التحديث في Shopify"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
