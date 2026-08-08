@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, render_template
 import qrcode
 import io
 import base64
@@ -7,11 +7,7 @@ main = Blueprint('main', __name__)
 
 @main.route('/')
 def home():
-    return jsonify({
-        "status": "PayDOD System Active",
-        "model": "B2B SaaS",
-        "version": "2.0"
-    })
+    return render_template('index.html')
 
 @main.route('/generate-qr/<order_id>/<float:amount>')
 def generate_qr(order_id, amount):

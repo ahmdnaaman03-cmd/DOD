@@ -3,21 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayDOD - QR Generator</title>
+    <title>PayDOD - نظام الدفع الرقمي</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <div class="logo">
-            <span class="pay">Pay</span><span class="d1">D</span><span class="od">OD</span>
-        </div>
-        <input type="number" id="orderNumber" placeholder="أدخل رقم العملية">
-        <button onclick="generateQR()">توليد QR Code</button>
-        <div id="qr-result">
-            <span style="color: #555;">سيظهر الكود هنا</span>
-        </div>
+        <img src="{{ url_for('static', filename='images/logo.PNG') }}" alt="PayDOD Logo" class="logo">
+        <h1>نظام الدفع الذكي</h1>
+        <p>القضاء التام على مخاطر الدفع عند الاستلام عبر الأكواد الديناميكية</p>
+        <a href="#" class="btn">بدء المعاملة</a>
     </div>
-
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
