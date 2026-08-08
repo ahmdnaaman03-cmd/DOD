@@ -1,44 +1,63 @@
-from flask import Flask, request, jsonify
-import qrcode
-import io
-import base64
+import os
+import requests
+from dotenv import load_dotenv
+from flask import Flask, request, jsonify, render_template
+
+load_dotenv()
 
 app = Flask(__name__)
 
-def create_qr_code(order_id, amount):
+API_VERSION = "2025-01"
+SHOPIFY_STORE = os.getenv("SHOPIFY_STORE_URL", "aman-test-store-c9korns0.myshopify.com")
+SHOPIFY_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+
+HEADERS = {
+    "X-Shopify-Access-Token": SHOPIFY_TOKEN,
+    "Content-Type": "application/json"
+}
+
+@app.route('/')
+def home():
+    return render_template('driver.html')
+
+@app.route('/api/get-shipment', methods=['GET'])
+def get_shipment():
+    order_name = request.args.get('id', '').strip()
+    clean_name = order_name.replace('#', '')
+    
+    url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/orders.json?name=%23{clean_name}&status=any"
     try:
-        payload = f"PayDOD:Order-{order_id}:Amount-{amount}"
-        img = qrcode.make(payload)
-        
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        
-        return img_str
+        res = requests.get(url, headers=HEADERS)
+        if res.status_code == 200:
+            orders = res.json().get('orders', [])
+            if orders:
+                order = orders[0]
+                cust = order.get('customer', {})
+                c_name = f"{cust.get('first_name', '')} {cust.get('last_name', '')}".strip() or "عميل"
+                return jsonify({
+                    "success": True,
+                    "shopify_order_id": order['id'],
+                    "customer_name": c_name,
+                    "amount": order.get('total_price', 0)
+                })
+            return jsonify({"success": False, "message": "الطلب غير موجود"}), 404
+        return jsonify({"success": False, "message": f"خطأ: {res.status_code}"}), res.status_code
     except Exception as e:
-        print(f"Error generating QR: {e}")
-        return None
+        return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/generate_qr', methods=['POST'])
-def generate_qr():
-    data = request.get_json()
-    
-    # حماية من البيانات الفارغة لمنع خطأ NoneType
-    if not data or 'amount' not in data or 'order_id' not in data:
-        return jsonify({"error": "Missing required fields"}), 400
-
+@app.route('/api/pay', methods=['POST'])
+def pay_shipment():
+    data = request.json or {}
+    order_id = data.get('shopify_order_id')
     amount = data.get('amount')
-    order_id = data.get('order_id')
-
-    if amount is None or order_id is None:
-        return jsonify({"error": "Values cannot be None"}), 400
-
-    qr_image = create_qr_code(order_id, amount)
     
-    if qr_image is None:
-        return jsonify({"error": "Failed to generate QR code image"}), 500
-
-    return jsonify({"status": "success", "qr_data": qr_image}), 200
+    url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/orders/{order_id}/transactions.json"
+    payload = {"transaction": {"kind": "capture", "status": "success", "amount": amount}}
+    
+    res = requests.post(url, json=payload, headers=HEADERS)
+    if res.status_code in [200, 201]:
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": f"فشل الاتصال بـ شوبيفاي ({res.status_code})"}), res.status_code
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
