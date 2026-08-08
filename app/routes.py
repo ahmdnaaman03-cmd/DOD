@@ -1,7 +1,8 @@
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, jsonify, render_template, request
 import qrcode
 import io
 import base64
+import sqlite3
 
 main = Blueprint('main', __name__)
 
@@ -28,3 +29,22 @@ def generate_qr(order_id, amount):
         "amount": amount,
         "qr_image_base64": qr_base64
     })
+
+@main.route('/shopify-webhook', methods=['POST'])
+def shopify_webhook():
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data received"}), 400
+        
+    order_id = data.get('id')
+    financial_status = data.get('financial_status')
+    
+    conn = sqlite3.connect('paydod.db')
+    c = conn.cursor()
+    c.execute('''
+        UPDATE shipments SET status = ? WHERE id = ?
+    ''', (financial_status, str(order_id)))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"status": "success", "order_id": order_id, "updated_status": financial_status}), 200
