@@ -13,8 +13,9 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'paydod-secret-key')
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 
-SHOPY_URL = os.getenv('SHOPIFY_SHOP_URL')
-SHOPIFY_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
+SHOPIFY_STORE_URL = os.getenv('SHOPIFY_SHOP_URL')
+ACCESS_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
+API_VERSION = "2024-01"
 
 @app.route('/')
 def index():
@@ -73,49 +74,74 @@ def stripe_webhook():
         order_number = metadata.get('order_number')
 
         if order_number:
-            print(f"Processing paid order: {order_number}", file=sys.stderr)
+            print(f"Processing paid order via GraphQL: {order_number}", file=sys.stderr)
             update_shopify_order(order_number, session.get('amount_total', 0) / 100)
 
     return '', 200
 
 def update_shopify_order(order_number, amount):
-    if not SHOPY_URL or not SHOPIFY_TOKEN:
+    if not SHOPIFY_STORE_URL or not ACCESS_TOKEN:
         print("Shopify credentials missing!", file=sys.stderr)
         return
 
-    clean_order_num = str(order_number).replace('#', '').strip()
-    headers = {"X-Shopify-Access-Token": SHOPIFY_TOKEN}
+    clean_name = str(order_number).replace("#", "").strip()
+    graphql_url = f"https://{SHOPIFY_STORE_URL}/admin/api/{API_VERSION}/graphql.json"
     
-    search_urls = [
-        f"https://{SHOPY_URL}/admin/api/2024-01/orders.json?name={clean_order_num}&status=any",
-        f"https://{SHOPY_URL}/admin/api/2024-01/orders.json?name=%23{clean_order_num}&status=any"
-    ]
-
-    orders = []
-    for search_url in search_urls:
-        res = requests.get(search_url, headers=headers)
-        found = res.json().get('orders', [])
-        if found:
-            orders = found
-            break
-
-    if not orders:
-        print(f"Shopify order {order_number} not found via API search.", file=sys.stderr)
+    headers = {
+        "X-Shopify-Access-Token": ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    query = """
+    query ($query: String!) {
+      orders(first: 1, query: $query) {
+        edges {
+          node {
+            id
+            name
+          }
+        }
+      }
+    }
+    """
+    variables = {"query": f"name:#{clean_name} OR name:{clean_name}"}
+    
+    res = requests.post(graphql_url, json={'query': query, 'variables': variables}, headers=headers)
+    if res.status_code != 200:
+        print(f"GraphQL Search HTTP Error: {res.text}", file=sys.stderr)
         return
 
-    shopify_order_id = orders[0]['id']
+    data = res.json()
+    edges = data.get('data', {}).get('orders', {}).get('edges', [])
+    if not edges:
+        print(f"Shopify order {order_number} not found via GraphQL search.", file=sys.stderr)
+        return
+        
+    order_id = edges[0]['node']['id']
 
-    txn_url = f"https://{SHOPY_URL}/admin/api/2024-01/orders/{shopify_order_id}/transactions.json"
-    txn_data = {
-        "transaction": {
-            "currency": "USD",
-            "amount": str(amount),
-            "kind": "sale",
-            "status": "success"
+    mutation = """
+    mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
+      orderMarkAsPaid(input: $input) {
+        order {
+          id
+          fullyPaid
+          displayFinancialStatus
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+    """
+    mut_variables = {
+        "input": {
+            "id": order_id
         }
     }
-    txn_res = requests.post(txn_url, json=txn_data, headers=headers)
-    print(f"Shopify update result for {order_number}: {txn_res.status_code} - {txn_res.text}", file=sys.stderr)
+    
+    mut_res = requests.post(graphql_url, json={'query': mutation, 'variables': mut_variables}, headers=headers)
+    print(f"Shopify GraphQL Update Result: {mut_res.status_code} - {mut_res.text}", file=sys.stderr)
 
 if __name__ == '__main__':
     app.run(debug=True)
