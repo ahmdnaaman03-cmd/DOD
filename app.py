@@ -83,12 +83,21 @@ def update_shopify_order(order_number, amount):
         print("Shopify credentials missing!", file=sys.stderr)
         return
 
-    clean_order_num = order_number.replace('#', '')
-    search_url = f"https://{SHOPY_URL}/admin/api/2024-01/orders.json?name=%23{clean_order_num}&status=any"
+    clean_order_num = str(order_number).replace('#', '').strip()
     headers = {"X-Shopify-Access-Token": SHOPIFY_TOKEN}
+    
+    search_urls = [
+        f"https://{SHOPY_URL}/admin/api/2024-01/orders.json?name={clean_order_num}&status=any",
+        f"https://{SHOPY_URL}/admin/api/2024-01/orders.json?name=%23{clean_order_num}&status=any"
+    ]
 
-    res = requests.get(search_url, headers=headers)
-    orders = res.json().get('orders', [])
+    orders = []
+    for search_url in search_urls:
+        res = requests.get(search_url, headers=headers)
+        found = res.json().get('orders', [])
+        if found:
+            orders = found
+            break
 
     if not orders:
         print(f"Shopify order {order_number} not found via API search.", file=sys.stderr)
@@ -106,7 +115,7 @@ def update_shopify_order(order_number, amount):
         }
     }
     txn_res = requests.post(txn_url, json=txn_data, headers=headers)
-    print(f"Shopify update result for {order_number}: {txn_res.status_code}", file=sys.stderr)
+    print(f"Shopify update result for {order_number}: {txn_res.status_code} - {txn_res.text}", file=sys.stderr)
 
 if __name__ == '__main__':
     app.run(debug=True)
