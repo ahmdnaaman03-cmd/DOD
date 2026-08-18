@@ -92,56 +92,69 @@ def update_shopify_order(order_number, amount):
         "Content-Type": "application/json"
     }
     
-    query = """
+    # 1. البحث في الطلبات العادية (Orders)
+    query_order = """
     query ($query: String!) {
       orders(first: 1, query: $query) {
-        edges {
-          node {
-            id
-            name
+        edges { node { id name } }
+      }
+    }
+    """
+    vars_order = {"query": f"name:#{clean_name} OR name:{clean_name}"}
+    res_order = requests.post(graphql_url, json={'query': query_order, 'variables': vars_order}, headers=headers)
+    
+    order_id = None
+    if res_order.status_code == 200:
+        edges = res_order.json().get('data', {}).get('orders', {}).get('edges', [])
+        if edges:
+            order_id = edges[0]['node']['id']
+
+    # إذا وجدناه كـ Order عادي، نقوم بتحديثه بالمارك أس بيد
+    if order_id:
+        mutation_order = """
+        mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
+          orderMarkAsPaid(input: $input) {
+            order { id fullyPaid }
+            userErrors { message }
           }
         }
+        """
+        mut_res = requests.post(graphql_url, json={'query': mutation_order, 'variables': {"input": {"id": order_id}}}, headers=headers)
+        print(f"Shopify Order Update Result: {mut_res.status_code} - {mut_res.text}", file=sys.stderr)
+        return
+
+    # 2. إذا لم نجد order، نبحث في مسودات الطلبات (Draft Orders)
+    query_draft = """
+    query ($query: String!) {
+      draftOrders(first: 1, query: $query) {
+        edges { node { id name status } }
       }
     }
     """
-    variables = {"query": f"name:#{clean_name} OR name:{clean_name}"}
+    vars_draft = {"query": f"name:#{clean_name} OR name:{clean_name}"}
+    res_draft = requests.post(graphql_url, json={'query': query_draft, 'variables': vars_draft}, headers=headers)
     
-    res = requests.post(graphql_url, json={'query': query, 'variables': variables}, headers=headers)
-    if res.status_code != 200:
-        print(f"GraphQL Search HTTP Error: {res.text}", file=sys.stderr)
+    draft_id = None
+    if res_draft.status_code == 200:
+        edges_draft = res_draft.json().get('data', {}).get('draftOrders', {}).get('edges', [])
+        if edges_draft:
+            draft_id = edges_draft[0]['node']['id']
+
+    # إذا وجدناه كـ Draft Order، نقوم بتأكيده وتحويله لـ Paid
+    if draft_id:
+        mutation_draft = """
+        mutation draftOrderComplete($id: ID!) {
+          draftOrderComplete(id: $id, paymentPending: false) {
+            draftOrder { id status }
+            userErrors { message }
+          }
+        }
+        """
+        mut_draft_res = requests.post(graphql_url, json={'query': mutation_draft, 'variables': {"id": draft_id}}, headers=headers)
+        print(f"Shopify Draft Order Complete Result: {mut_draft_res.status_code} - {mut_draft_res.text}", file=sys.stderr)
         return
 
-    data = res.json()
-    edges = data.get('data', {}).get('orders', {}).get('edges', [])
-    if not edges:
-        print(f"Shopify order {order_number} not found via GraphQL search.", file=sys.stderr)
-        return
-        
-    order_id = edges[0]['node']['id']
-
-    mutation = """
-    mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
-      orderMarkAsPaid(input: $input) {
-        order {
-          id
-          fullyPaid
-          displayFinancialStatus
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }
-    """
-    mut_variables = {
-        "input": {
-            "id": order_id
-        }
-    }
-    
-    mut_res = requests.post(graphql_url, json={'query': mutation, 'variables': mut_variables}, headers=headers)
-    print(f"Shopify GraphQL Update Result: {mut_res.status_code} - {mut_res.text}", file=sys.stderr)
+    print(f"Order or Draft Order {order_number} not found in Shopify.", file=sys.stderr)
 
 if __name__ == '__main__':
     app.run(debug=True)
