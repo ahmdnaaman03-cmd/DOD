@@ -1,160 +1,102 @@
 import os
-import sys
-import stripe
+import json
 import requests
-from flask import Flask, render_template, request, jsonify
+import stripe
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'paydod-secret-key')
 
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-SHOPIFY_STORE_URL = os.getenv('SHOPIFY_SHOP_URL')
-ACCESS_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
-API_VERSION = "2024-01"
+SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+SHOPIFY_GRAPHQL_URL = f"https://{SHOPIFY_STORE}.myshopify.com/admin/api/2024-07/graphql.json" if SHOPIFY_STORE else None
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+orders_db = {}
 
-@app.route('/generate', methods=['POST'])
-def generate_payment():
-    order_id = request.form.get('order_id')
-    amount = request.form.get('amount')
-
-    if not order_id or not amount:
-        return jsonify({'error': 'Missing Order ID or Amount'}), 400
-
+def get_shopify_order_gid(order_name):
+    if not SHOPIFY_GRAPHQL_URL or not SHOPIFY_ACCESS_TOKEN:
+        return None
+    headers = {"Content-Type": "application/json", "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
+    query = """
+    query getOrderDetails($query: String!) {
+      orders(first: 1, query: $query) {
+        edges { node { id } }
+      }
+    }
+    """
+    variables = {"query": f"name:{order_name}"}
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {'name': f'PayDOD Order: {order_id}'},
-                    'unit_amount': int(float(amount) * 100),
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            metadata={'order_number': order_id},
-            success_url=request.host_url + 'success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=request.host_url,
-        )
-        return jsonify({'url': session.url})
+        res = requests.post(SHOPIFY_GRAPHQL_URL, json={'query': query, 'variables': variables}, headers=headers)
+        edges = res.json().get("data", {}).get("orders", {}).get("edges", [])
+        if edges:
+            return edges[0]["node"]["id"]
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error fetching GID: {e}")
+    return None
 
-@app.route('/success')
-def success():
-    return "<h2 style='text-align:center; color:green; margin-top:50px;'>Payment Successful! Order Confirmed via PayDOD.</h2>"
+def mark_shopify_order_as_paid(order_gid):
+    if not SHOPIFY_GRAPHQL_URL or not SHOPIFY_ACCESS_TOKEN or not order_gid:
+        return False
+    headers = {"Content-Type": "application/json", "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
+    mutation = """
+    mutation markOrderAsPaid($input: OrderMarkAsPaidInput!) {
+      orderMarkAsPaid(input: $input) {
+        order { id displayFinancialStatus }
+        userErrors { field message }
+      }
+    }
+    """
+    variables = {"input": {"id": order_gid}}
+    try:
+        res = requests.post(SHOPIFY_GRAPHQL_URL, json={'query': mutation, 'variables': variables}, headers=headers)
+        errors = res.json().get("data", {}).get("orderMarkAsPaid", {}).get("userErrors", [])
+        return len(errors) == 0
+    except Exception as e:
+        print(f"Error marking order paid: {e}")
+        return False
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/api/order-status/<order_id>', methods=['GET'])
+def get_order_status(order_id):
+    clean_id = order_id.replace("#", "")
+    status = orders_db.get(clean_id, "PENDING")
+    return jsonify({"order_id": clean_id, "status": status})
+
+@app.route('/webhook/stripe', methods=['POST'])
 def stripe_webhook():
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get('Stripe-Signature')
-    event = None
 
     try:
         if STRIPE_WEBHOOK_SECRET:
             event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
         else:
-            event = request.get_json()
+            event = json.loads(payload)
     except Exception as e:
-        print(f"Webhook signature verification failed: {e}", file=sys.stderr)
-        return jsonify({'error': str(e)}), 400
+        print(f"Webhook Signature Error: {e}")
+        return jsonify({'status': 'invalid payload'}), 400
 
-    if event.get('type') in ['checkout.session.completed', 'payment_intent.succeeded']:
-        session = event.get('data', {}).get('object', {})
+    if event['type'] in ['checkout.session.completed', 'payment_intent.succeeded']:
+        session = event['data']['object']
         metadata = session.get('metadata', {})
-        order_number = metadata.get('order_number')
+        order_name = metadata.get('order_name', '#1025')
+        clean_order_id = order_name.replace("#", "")
 
-        if order_number:
-            print(f"Processing paid order via GraphQL: {order_number}", file=sys.stderr)
-            update_shopify_order(order_number, session.get('amount_total', 0) / 100)
+        # 1. تحديث لشاشة المندوب
+        orders_db[clean_order_id] = "PAID"
+        print(f"[Mandoob DB] Order #{clean_order_id} set to PAID")
 
-    return '', 200
+        # 2. تحديث Shopify
+        gid = get_shopify_order_gid(order_name)
+        if gid:
+            success = mark_shopify_order_as_paid(gid)
+            print(f"[Shopify GraphQL] Order {order_name} paid status: {success}")
 
-def update_shopify_order(order_number, amount):
-    if not SHOPIFY_STORE_URL or not ACCESS_TOKEN:
-        print("Shopify credentials missing!", file=sys.stderr)
-        return
-
-    clean_name = str(order_number).replace("#", "").strip()
-    graphql_url = f"https://{SHOPIFY_STORE_URL}/admin/api/{API_VERSION}/graphql.json"
-    
-    headers = {
-        "X-Shopify-Access-Token": ACCESS_TOKEN,
-        "Content-Type": "application/json"
-    }
-    
-    # 1. البحث في الطلبات العادية (Orders)
-    query_order = """
-    query ($query: String!) {
-      orders(first: 1, query: $query) {
-        edges { node { id name } }
-      }
-    }
-    """
-    vars_order = {"query": f"name:#{clean_name} OR name:{clean_name}"}
-    res_order = requests.post(graphql_url, json={'query': query_order, 'variables': vars_order}, headers=headers)
-    
-    order_id = None
-    if res_order.status_code == 200:
-        edges = res_order.json().get('data', {}).get('orders', {}).get('edges', [])
-        if edges:
-            order_id = edges[0]['node']['id']
-
-    # إذا وجدناه كـ Order عادي، نقوم بتحديثه بالمارك أس بيد
-    if order_id:
-        mutation_order = """
-        mutation orderMarkAsPaid($input: OrderMarkAsPaidInput!) {
-          orderMarkAsPaid(input: $input) {
-            order { id fullyPaid }
-            userErrors { message }
-          }
-        }
-        """
-        mut_res = requests.post(graphql_url, json={'query': mutation_order, 'variables': {"input": {"id": order_id}}}, headers=headers)
-        print(f"Shopify Order Update Result: {mut_res.status_code} - {mut_res.text}", file=sys.stderr)
-        return
-
-    # 2. إذا لم نجد order، نبحث في مسودات الطلبات (Draft Orders)
-    query_draft = """
-    query ($query: String!) {
-      draftOrders(first: 1, query: $query) {
-        edges { node { id name status } }
-      }
-    }
-    """
-    vars_draft = {"query": f"name:#{clean_name} OR name:{clean_name}"}
-    res_draft = requests.post(graphql_url, json={'query': query_draft, 'variables': vars_draft}, headers=headers)
-    
-    draft_id = None
-    if res_draft.status_code == 200:
-        edges_draft = res_draft.json().get('data', {}).get('draftOrders', {}).get('edges', [])
-        if edges_draft:
-            draft_id = edges_draft[0]['node']['id']
-
-    # إذا وجدناه كـ Draft Order، نقوم بتأكيده وتحويله لـ Paid
-    if draft_id:
-        mutation_draft = """
-        mutation draftOrderComplete($id: ID!) {
-          draftOrderComplete(id: $id, paymentPending: false) {
-            draftOrder { id status }
-            userErrors { message }
-          }
-        }
-        """
-        mut_draft_res = requests.post(graphql_url, json={'query': mutation_draft, 'variables': {"id": draft_id}}, headers=headers)
-        print(f"Shopify Draft Order Complete Result: {mut_draft_res.status_code} - {mut_draft_res.text}", file=sys.stderr)
-        return
-
-    print(f"Order or Draft Order {order_number} not found in Shopify.", file=sys.stderr)
+    return jsonify({'status': 'success'}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
