@@ -7,20 +7,26 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# --- إعدادات آمنة من .env ---
-pusher_client = Pusher(
-  app_id=os.getenv("PUSHER_APP_ID"),
-  key=os.getenv("PUSHER_KEY"),
-  secret=os.getenv("PUSHER_SECRET"),
-  cluster=os.getenv("PUSHER_CLUSTER"),
-  ssl=True
-)
+# --- جلب وإصلاح قيم Pusher لتجنب TypeError ---
+PUSHER_APP_ID = str(os.getenv("PUSHER_APP_ID") or "").strip()
+PUSHER_KEY = str(os.getenv("PUSHER_KEY") or "").strip()
+PUSHER_SECRET = str(os.getenv("PUSHER_SECRET") or "").strip()
+PUSHER_CLUSTER = str(os.getenv("PUSHER_CLUSTER") or "eu").strip()
+
+pusher_client = None
+if PUSHER_APP_ID and PUSHER_KEY and PUSHER_SECRET:
+    pusher_client = Pusher(
+        app_id=PUSHER_APP_ID,
+        key=PUSHER_KEY,
+        secret=PUSHER_SECRET,
+        cluster=PUSHER_CLUSTER,
+        ssl=True
+    )
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
 SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-SHOPIFY_GRAPHQL_URL = f"https://{SHOPIFY_STORE}.myshopify.com/admin/api/2024-01/graphql.json" if SHOPIFY_STORE else None
 
 DB_FILE = "paydod.db"
 
@@ -46,12 +52,10 @@ def get_db_order_status(order_id):
     conn.close()
     return row[0] if row else "PENDING"
 
-# --- 1. الصفحة الرئيسية (تفتح index.html) ---
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# --- 2. شاشة المندوب ---
 @app.route('/mandoob/<order_id>')
 def mandoob_page(order_id):
     clean_id = order_id.replace('#', '').strip()
@@ -72,9 +76,8 @@ def mandoob_page(order_id):
             el.style.background = '#d4edda';
         });
         </script>
-    </body></html>''', order_id=clean_id, status=current_status, key=os.getenv("PUSHER_KEY"), cluster=os.getenv("PUSHER_CLUSTER"))
+    </body></html>''', order_id=clean_id, status=current_status, key=PUSHER_KEY, cluster=PUSHER_CLUSTER)
 
-# --- 3. Webhook استقبال الدفع ---
 @app.route('/webhook/stripe', methods=['POST'])
 def stripe_webhook():
     payload = request.get_data(as_text=True)
@@ -84,7 +87,8 @@ def stripe_webhook():
             order_name = event['data']['object'].get('metadata', {}).get('order_name', '#1025')
             clean_id = order_name.replace('#', '').strip()
             set_order_status(clean_id, 'PAID')
-            pusher_client.trigger(f'order-{clean_id}', 'payment-success', {'status': 'PAID'})
+            if pusher_client:
+                pusher_client.trigger(f'order-{clean_id}', 'payment-success', {'status': 'PAID'})
     except Exception as e:
         print(f"Webhook error: {e}")
     return jsonify({'status': 'success'}), 200
