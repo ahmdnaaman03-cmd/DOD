@@ -1,10 +1,11 @@
-import os, json, sqlite3, requests, stripe
+import os, json, sqlite3, stripe
 from pusher import Pusher
 from flask import Flask, request, jsonify, render_template_string
 from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
+
 PUSHER_APP_ID = str(os.getenv("PUSHER_APP_ID") or "").strip()
 PUSHER_KEY = str(os.getenv("PUSHER_KEY") or "").strip()
 PUSHER_SECRET = str(os.getenv("PUSHER_SECRET") or "").strip()
@@ -15,6 +16,7 @@ if PUSHER_APP_ID and PUSHER_KEY and PUSHER_SECRET:
     pusher_client = Pusher(app_id=PUSHER_APP_ID, key=PUSHER_KEY, secret=PUSHER_SECRET, cluster=PUSHER_CLUSTER, ssl=True)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
 DB_FILE = "paydod.db"
 
 def init_db():
@@ -27,6 +29,7 @@ def set_order_status(order_id, status):
     conn = sqlite3.connect(DB_FILE)
     conn.execute('INSERT INTO orders (order_id, status) VALUES (?, ?) ON CONFLICT(order_id) DO UPDATE SET status=excluded.status', (order_id, status))
     conn.commit(); conn.close()
+
 def get_db_order_status(order_id):
     conn = sqlite3.connect(DB_FILE)
     row = conn.execute('SELECT status FROM orders WHERE order_id = ?', (order_id,)).fetchone()
@@ -36,89 +39,103 @@ def get_db_order_status(order_id):
 @app.route('/')
 def home():
     return render_template_string('''<!DOCTYPE html>
-    <html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayDOD Checkout</title>
-    <style>body { background: #060919; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-    .card { background: #0e1327; width: 100%; max-width: 400px; border-radius: 24px; padding: 35px 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); text-align: center; border: 1px solid #1e293b; }
-    .brand { font-size: 36px; font-weight: 900; margin-bottom: 6px; } .brand .pay { color: #fff; } .brand .d1 { color: #8b5cf6; } .brand .o { color: #3b82f6; } .brand .d2 { color: #06b6d4; }
-    .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 25px; line-height: 1.5; }
-    .input-group { text-align: right; margin-bottom: 20px; } label { font-size: 13px; color: #cbd5e1; display: block; margin-bottom: 8px; font-weight: 600; }
-    input { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #334155; background: #1e293b; color: #fff; font-size: 15px; box-sizing: border-box; outline: none; }
-    .btn { background: linear-gradient(135deg, #8b5cf6, #3b82f6); color: #fff; border: none; width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }</style></head>
-    <body><div class="card"><div class="brand"><span class="pay">Pay</span><span class="d1">D</span><span class="o">O</span><span class="d2">D</span></div>
-    <div class="subtitle">توليد دفع رقمي فوري لطلبات شوبيفاي<br><span style="color:#64748b;">Instant Digital Payment for Shopify Orders</span></div>
-    <form action="#" onsubmit="event.preventDefault(); window.location.href='/mandoob/' + document.getElementById('order').value.replace('#','');">
-    <div class="input-group"><label>رقم الطلب / Order ID</label><input type="text" id="order" placeholder="e.g. 1025" required></div>
-    <button type="submit" class="btn">توليد الـ QR Code والرابط</button></form></div></body></html>''')
+    <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayDOD - Instant Payment QR Codes</title>
+    <style>
+        body { background: #0b0f19; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .card { background: #111827; width: 100%; max-width: 420px; border-radius: 20px; padding: 30px 24px; border: 1px solid #1f2937; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); text-align: center; }
+        .brand { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 20px; } .brand span { color: #818cf8; }
+        .hero-title { font-size: 22px; font-weight: 700; line-height: 1.3; color: #f3f4f6; margin-bottom: 10px; }
+        .hero-sub { font-size: 13px; color: #9ca3af; margin-bottom: 25px; line-height: 1.5; }
+        .input-box { text-align: left; margin-bottom: 16px; }
+        .input-box label { font-size: 12px; color: #d1d5db; display: block; margin-bottom: 6px; font-weight: 600; }
+        .input-box input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #374151; background: #1f2937; color: #fff; font-size: 15px; box-sizing: border-box; outline: none; }
+        .btn { background: #6366f1; color: #fff; border: none; width: 100%; padding: 15px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    </style></head>
+    <body><div class="card"><div class="brand">Pay<span>DOD</span></div>
+    <div class="hero-title">Instant Payment QR Codes for Your Business</div>
+    <div class="hero-sub">Generate seamless Stripe checkout links and QR codes instantly without setting up a full store.</div>
+    <form action="#" onsubmit="event.preventDefault(); const o=document.getElementById('oid').value.replace('#',''); const a=document.getElementById('amt').value; window.location.href='/mandoob/' + o + '?amount=' + a;">
+    <div class="input-box"><label>Order ID</label><input type="text" id="oid" placeholder="e.g. ORD-9901" required></div>
+    <div class="input-box"><label>Amount ($)</label><input type="number" step="any" id="amt" placeholder="e.g. 49.00" required></div>
+    <button type="submit" class="btn">Generate Payment QR</button></form></div></body></html>''')
+
 @app.route('/mandoob/<order_id>')
 def mandoob_page(order_id):
     clean_id = order_id.replace('#', '').strip()
+    amount = request.args.get('amount', '100')
     st = get_db_order_status(clean_id)
-    url = f"https://Ahmdnoaman.pythonanywhere.com/pay/{clean_id}"
-    qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={url}&color=ffffff&bgcolor=0e1327"
-    return render_template_string('''<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayDOD - بوابة دفع المندوب</title><script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-    <style>body { background-color: #060919; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
-    .card { background: #0e1327; width: 100%; max-width: 380px; border-radius: 24px; padding: 35px 25px; text-align: center; border: 1px solid #1e293b; }
-    .brand-logo { font-size: 36px; font-weight: 900; margin-bottom: 6px; } .pay { color: #fff; } .d1 { color: #8b5cf6; } .o { color: #3b82f6; } .d2 { color: #06b6d4; }
-    .order-badge { display: inline-block; background: rgba(255,255,255,0.06); color: #94a3b8; padding: 6px 18px; border-radius: 20px; font-size: 14px; font-weight: 600; margin-bottom: 25px; }
-    .qr-box { background: #0e1327; padding: 15px; border-radius: 20px; display: inline-block; border: 2px solid #8b5cf6; margin-bottom: 25px; } .qr-box img { width: 210px; height: 210px; border-radius: 10px; }
-    .status-btn { padding: 16px; border-radius: 14px; font-size: 15px; font-weight: 700; transition: all 0.3s ease; }
-    .pending { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
-    .paid { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.4); } .sub-text { font-size: 11px; display: block; margin-top: 4px; opacity: 0.8; }</style></head>
-    <body><div class="card"><div class="brand-logo"><span class="pay">Pay</span><span class="d1">D</span><span class="o">O</span><span class="d2">D</span></div>
-    <div class="order-badge">طلب رقم / Order: #{{ oid }}</div>
-    <div id="qr-container">{% if st != 'PAID' %}<p style="font-size:13px; color:#94a3b8; margin-bottom:15px;">امسح الـ QR للدفع الفوري<span class="sub-text">Scan QR Code to Pay</span></p>
-    <div class="qr-box"><img src="{{ qr }}" alt="QR Code"></div>{% endif %}</div>
+    pay_link = f"https://Ahmdnoaman.pythonanywhere.com/pay/{clean_id}?amount={amount}"
+    qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={pay_link}&color=ffffff&bgcolor=111827"
+    return render_template_string('''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayDOD - Checkout</title><script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+    <style>
+        body { background: #0b0f19; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .card { background: #111827; width: 100%; max-width: 420px; border-radius: 20px; padding: 30px 24px; border: 1px solid #1f2937; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); text-align: center; }
+        .brand { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 15px; } .brand span { color: #818cf8; }
+        .order-info { background: #1f2937; padding: 12px; border-radius: 10px; font-size: 14px; color: #9ca3af; margin-bottom: 20px; }
+        .qr-box { background: #111827; padding: 10px; border-radius: 14px; display: inline-block; border: 1px solid #374151; margin-bottom: 15px; } .qr-box img { width: 210px; height: 210px; border-radius: 8px; }
+        .pay-url { display: inline-block; color: #818cf8; font-size: 14px; font-weight: 600; margin-bottom: 20px; text-decoration: none; }
+        .status-btn { padding: 14px; border-radius: 10px; font-size: 14px; font-weight: 700; }
+        .pending { background: rgba(245,158,11,0.1); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+        .paid { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); }
+    </style></head>
+    <body><div class="card"><div class="brand">Pay<span>DOD</span></div>
+    <div class="order-info">Order <strong>#{{ oid }}</strong> • Amount: <strong>${{ amount }}</strong></div>
+    <div id="qr-container">{% if st != 'PAID' %}
+    <div style="font-size:13px; color:#9ca3af; margin-bottom:10px;">Scan to Pay:</div>
+    <div class="qr-box"><img src="{{ qr }}" alt="QR Code"></div><br>
+    <a href="{{ pay_link }}" target="_blank" class="pay-url">Or click here to pay directly →</a>{% endif %}</div>
     <div id="status" class="status-btn {% if st == 'PAID' %}paid{% else %}pending{% endif %}">
-    {% if st == 'PAID' %}✅ تم الدفع بنجاح!<span class="sub-text">Paid Successfully</span>
-    {% else %}⏳ في انتظار تأكيد الدفع...<span class="sub-text">Awaiting Payment Confirm</span>{% endif %}</div></div>
+    {% if st == 'PAID' %}✅ Paid Successfully{% else %}⏳ Awaiting Payment...{% endif %}</div></div>
     <script>
     const pusher = new Pusher('{{ key }}', {cluster: '{{ cluster }}'});
     pusher.subscribe('order-{{ oid }}').bind('payment-success', () => {
         const el = document.getElementById('status');
-        el.innerHTML = '✅ تم الدفع بنجاح!<span class="sub-text">Paid Successfully</span>';
+        el.innerHTML = '✅ Paid Successfully';
         el.className = 'status-btn paid';
         const qrBox = document.getElementById('qr-container');
         if (qrBox) qrBox.style.display = 'none';
-    });</script></body></html>''', oid=clean_id, st=st, qr=qr, key=PUSHER_KEY, cluster=PUSHER_CLUSTER)
+    });</script></body></html>''', oid=clean_id, amount=amount, st=st, qr=qr, pay_link=pay_link, key=PUSHER_KEY, cluster=PUSHER_CLUSTER)
+
+@app.route('/pay/<order_id>')
+def pay_route(order_id):
+    clean_id = order_id.replace('#', '').strip()
+    amount = float(request.args.get('amount', '100'))
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {'name': f'Order #{clean_id}'},
+                    'unit_amount': int(amount * 100),
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}?amount={amount}',
+            cancel_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}?amount={amount}',
+            metadata={'order_name': f'#{clean_id}'}
+        )
+        return f'<script>window.location.href="{session.url}";</script>'
+    except Exception as e:
+        return f"<h3>Stripe Error:</h3><p>{e}</p>"
 
 @app.route('/webhook/stripe', methods=['POST'])
 def stripe_webhook():
+    payload = request.get_data(as_text=True)
     try:
-        event = json.loads(request.get_data(as_text=True))
+        event = json.loads(payload)
         if event['type'] in ['checkout.session.completed', 'payment_intent.succeeded']:
-            clean_id = event['data']['object'].get('metadata', {}).get('order_name', '#1025').replace('#', '').strip()
+            order_name = event['data']['object'].get('metadata', {}).get('order_name', '#1025')
+            clean_id = order_name.replace('#', '').strip()
             set_order_status(clean_id, 'PAID')
-            if pusher_client: pusher_client.trigger(f'order-{clean_id}', 'payment-success', {'status': 'PAID'})
-    except Exception as e: print(f"Webhook error: {e}")
+            if pusher_client:
+                pusher_client.trigger(f'order-{clean_id}', 'payment-success', {'status': 'PAID'})
+    except Exception as e:
+        print(f"Webhook error: {e}")
     return jsonify({'status': 'success'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-@app.route('/pay/<order_id>')
-def pay_page(order_id):
-    clean_id = order_id.replace('#', '').strip()
-    try:
-        if stripe.api_key:
-            session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
-                    'price_data': {
-                        'currency': 'egp',
-                        'product_data': {'name': f'طلب شوبيفاي #{clean_id}'},
-                        'unit_amount': 15000,
-                    },
-                    'quantity': 1,
-                }],
-                mode='payment',
-                success_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}',
-                cancel_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}',
-                metadata={'order_name': f'#{clean_id}'}
-            )
-            return f'<script>window.location.href="{session.url}";</script>'
-    except Exception as e:
-        print(f"Stripe Error: {e}")
-    
-    return f"<h3>صفحة الدفع التجريبية للطلب #{clean_id}</h3><p>رابط الدفع يعمل بنجاح!</p>"
