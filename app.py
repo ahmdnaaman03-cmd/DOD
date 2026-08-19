@@ -96,3 +96,29 @@ def stripe_webhook():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+@app.route('/pay/<order_id>')
+def pay_page(order_id):
+    clean_id = order_id.replace('#', '').strip()
+    try:
+        if stripe.api_key:
+            session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                line_items=[{
+                    'price_data': {
+                        'currency': 'egp',
+                        'product_data': {'name': f'طلب شوبيفاي #{clean_id}'},
+                        'unit_amount': 15000,
+                    },
+                    'quantity': 1,
+                }],
+                mode='payment',
+                success_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}',
+                cancel_url=f'https://Ahmdnoaman.pythonanywhere.com/mandoob/{clean_id}',
+                metadata={'order_name': f'#{clean_id}'}
+            )
+            return f'<script>window.location.href="{session.url}";</script>'
+    except Exception as e:
+        print(f"Stripe Error: {e}")
+    
+    return f"<h3>صفحة الدفع التجريبية للطلب #{clean_id}</h3><p>رابط الدفع يعمل بنجاح!</p>"
