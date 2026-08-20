@@ -1,113 +1,153 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" id="html-root" dir="ltr" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayDOD - تحويل الدفع عند الاستلام إلى دفع رقمي فوراً</title>
+    <title>PayDOD | Digital on Delivery</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { bgDark: '#030712', cardDark: '#0B132B', brandPurple: '#9333ea', brandBlue: '#0066ff' },
+                    fontFamily: { sans: ['Inter', 'sans-serif'], arabic: ['Cairo', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: 'Cairo', sans-serif; }
+        body { background-color: #030712; color: #ffffff; }
+        .logo-text { font-weight: 800; letter-spacing: -0.05em; font-size: 2.25rem; }
+        .text-pay { color: #ffffff; }
+        .text-d { color: #9333ea; }
+        .text-o { color: #0066ff; }
+        .text-d2 { color: #00b4d8; }
+        .glass-card { background: rgba(11, 19, 43, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); }
+        .input-box { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; }
+        .input-box:focus { border-color: #0066ff; outline: none; box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.25); }
+        .btn-gradient { background: linear-gradient(135deg, #9333ea 0%, #0066ff 100%); transition: all 0.3s ease; }
+        .btn-gradient:hover { opacity: 0.9; transform: translateY(-1px); }
+        .lang-active { background: #0066ff; color: #fff; border-color: #0066ff; }
+        .lang-inactive { background: rgba(255,255,255,0.05); color: #9ca3af; border-color: rgba(255,255,255,0.1); }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
-
-    <!-- Header / Navbar -->
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-2">
-                <span class="bg-blue-600 text-white font-black text-xl px-3 py-1 rounded-lg">PayDOD</span>
-                <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">Digital on Delivery</span>
+<body class="antialiased font-sans" id="body-font">
+    <header class="border-b border-gray-800/80 bg-bgDark/90 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-6 h-20 flex justify-between items-center">
+            <div class="flex items-center gap-1">
+                <span class="logo-text"><span class="text-pay">Pay</span><span class="text-d">D</span><span class="text-o">O</span><span class="text-d2">D</span></span>
             </div>
-            <a href="#demo" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-sm transition">جرب النظام الآن</a>
+            <div class="flex items-center gap-2">
+                <a href="https://wa.me/201066004512" target="_blank" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-600 hover:bg-green-700 text-white transition-all flex items-center gap-1">WhatsApp</a>
+                <div class="flex items-center gap-1 bg-gray-900/80 p-1 rounded-xl border border-gray-800">
+                    <button onclick="setLanguage('en')" id="btn-en" class="px-3 py-1.5 text-xs font-bold rounded-lg lang-active transition-all">EN</button>
+                    <button onclick="setLanguage('ar')" id="btn-ar" class="px-3 py-1.5 text-xs font-bold rounded-lg lang-inactive transition-all">العربية</button>
+                </div>
+            </div>
         </div>
     </header>
-
-    <!-- Hero Section -->
-    <section class="max-w-4xl mx-auto text-center py-16 px-4">
-        <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight mb-6">
-            حل أزمة الكاش مع المندوب<br>
-            <span class="text-blue-600">تحويل تحصيل COD إلى دفع رقمي لحظي</span>
-        </h1>
-        <p class="text-lg text-slate-600 mb-8 max-w-2xl mx-auto">
-            PayDOD هي البوابة التي تمكن المندوب من عرض QR Code ديناميكي للعميل عند الباب، ليقوم بالدفع ببطاقته أو محفظته فوراً، مع تحديث لحظي لمتجر شوبيفاي وشاشة المندوب.
-        </p>
-    </section>
-
-    <!-- Interactive Demo Section -->
-    <section id="demo" class="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-xl border border-slate-100 mb-16">
-        <h2 class="text-2xl font-bold text-center mb-6">تجربة الدفع الفوري (Live Demo)</h2>
-        <form id="checkout-form" class="space-y-4">
-            <div>
-                <label class="block text-sm font-bold mb-2 text-right">رقم الطلب (Shopify Order ID):</label>
-                <input type="text" id="shopify_order_id" value="1001" required class="w-full border border-slate-300 p-3 rounded-lg text-left dir-ltr focus:ring-2 focus:ring-blue-500 outline-none">
-            </div>
-            <div>
-                <label class="block text-sm font-bold mb-2 text-right">المبلغ (بالجنيه المصري):</label>
-                <input type="number" id="amount" value="150" required class="w-full border border-slate-300 p-3 rounded-lg text-left dir-ltr focus:ring-2 focus:ring-blue-500 outline-none">
-            </div>
-            <button type="submit" id="pay-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg text-lg transition">
-                إنشاء رابط / QR الدفع عبر Stripe
-            </button>
-        </form>
-        <div id="result" class="mt-4 text-center hidden"></div>
-    </section>
-
-    <!-- Features Section -->
-    <section class="bg-white py-12 border-t border-slate-200">
-        <div class="max-w-5xl mx-auto px-4 grid md:grid-cols-3 gap-8 text-center">
-            <div class="p-4">
-                <div class="text-3xl mb-2">⚡</div>
-                <h3 class="font-bold text-lg mb-2">تحديث لحظي (Pusher)</h3>
-                <p class="text-sm text-slate-500">تصل الإشارات فورية لشاشة المندوب دون الحاجة لإعادة تحميل الصفحة.</p>
-            </div>
-            <div class="p-4">
-                <div class="text-3xl mb-2">🛒</div>
-                <h3 class="font-bold text-lg mb-2">ربط مباشر مع Shopify</h3>
-                <p class="text-sm text-slate-500">تحديث حالة الطلب إلى Paid فور اكتمال عملية الدفع تلقائياً.</p>
-            </div>
-            <div class="p-4">
-                <div class="text-3xl mb-2">🔒</div>
-                <h3 class="font-bold text-lg mb-2">دفع آمن عبر Stripe</h3>
-                <p class="text-sm text-slate-500">حماية كاملة للبيانات ودعم لكافة البطاقات البنكية.</p>
-            </div>
+    <main class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
+        <div class="inline-block mb-4 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider" id="badge-text">
+            Digital on Delivery
         </div>
-    </section>
-
-    <!-- Script Section -->
+        <h1 class="text-4xl md:text-5xl font-extrabold leading-tight mb-6" id="hero-title">
+            Transform Cash on Delivery into <span class="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">Instant Digital Payment</span>
+        </h1>
+        <p class="text-gray-400 text-base md:text-lg max-w-2xl mx-auto mb-12" id="hero-desc">
+            Empower your delivery agents with dynamic QR codes. Customers pay securely at the door via card or wallet, syncing instantly with your Shopify store.
+        </p>
+        <div id="demo" class="max-w-md mx-auto glass-card p-8 rounded-3xl shadow-2xl text-start relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl"></div>
+            <div class="absolute bottom-0 left-0 w-32 h-32 bg-blue-600/10 rounded-full blur-2xl"></div>
+            <h3 class="text-xl font-bold mb-6 text-center" id="demo-card-title">Live Payment Terminal</h3>
+            <form id="checkout-form" class="space-y-4 relative z-10">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1" id="label-order">Shopify Order ID</label>
+                    <input type="text" id="shopify_order_id" value="1001" required class="w-full input-box p-3 rounded-xl text-sm font-mono text-center">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 mb-1" id="label-amount">Amount (EGP)</label>
+                    <input type="number" id="amount" value="150" required class="w-full input-box p-3 rounded-xl text-sm font-mono text-center">
+                </div>
+                <button type="submit" id="pay-btn" class="w-full btn-gradient text-white font-bold py-3.5 rounded-xl text-sm shadow-lg shadow-blue-500/20 mt-2">
+                    Generate Stripe Link
+                </button>
+            </form>
+            <div id="result" class="mt-4 text-center hidden text-sm"></div>
+        </div>
+    </main>
+    <footer class="border-t border-gray-900 py-6 text-center text-gray-600 text-xs">
+        <p id="footer-text">&copy; 2026 PayDOD. All rights reserved.</p>
+    </footer>
     <script>
+        const content = {
+            en: {
+                dir: 'ltr', font: 'font-sans', badge: 'Digital on Delivery',
+                title: 'Transform Cash on Delivery into <span class="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">Instant Digital Payment</span>',
+                desc: 'Empower your delivery agents with dynamic QR codes.',
+                demoTitle: 'Live Payment Terminal', labelOrder: 'Shopify Order ID', labelAmount: 'Amount (EGP)',
+                payBtn: 'Generate Stripe Link', generating: 'Generating Link...', footer: '&copy; 2026 PayDOD.'
+            },
+            ar: {
+                dir: 'rtl', font: 'font-arabic', badge: 'الدفع الرقمي عند الاستلام',
+                title: 'حول الدفع عند الاستلام إلى <span class="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">دفع رقمي لحظي آمن</span>',
+                desc: 'امنح مندوبيك رموز QR ديناميكية عند باب العميل.',
+                demoTitle: 'تجربة الدفع الفوري', labelOrder: 'رقم طلب شوبيفاي', labelAmount: 'المبلغ (جنيه مصري)',
+                payBtn: 'إنشاء رابط دفع Stripe', generating: 'جاري إنشاء الرابط...', footer: '&copy; 2026 PayDOD.'
+            }
+        };
+        function setLanguage(lang) {
+            const data = content[lang];
+            const html = document.getElementById('html-root');
+            const body = document.getElementById('body-font');
+            html.setAttribute('dir', data.dir);
+            body.className = `antialiased ${data.font}`;
+            document.getElementById('badge-text').innerText = data.badge;
+            document.getElementById('hero-title').innerHTML = data.title;
+            document.getElementById('hero-desc').innerText = data.desc;
+            document.getElementById('demo-card-title').innerText = data.demoTitle;
+            document.getElementById('label-order').innerText = data.labelOrder;
+            document.getElementById('label-amount').innerText = data.labelAmount;
+            document.getElementById('pay-btn').innerText = data.payBtn;
+            document.getElementById('footer-text').innerHTML = data.footer;
+            if(lang === 'ar') {
+                document.getElementById('btn-ar').className = 'px-3 py-1.5 text-xs font-bold rounded-lg lang-active transition-all';
+                document.getElementById('btn-en').className = 'px-3 py-1.5 text-xs font-bold rounded-lg lang-inactive transition-all';
+            } else {
+                document.getElementById('btn-en').className = 'px-3 py-1.5 text-xs font-bold rounded-lg lang-active transition-all';
+                document.getElementById('btn-ar').className = 'px-3 py-1.5 text-xs font-bold rounded-lg lang-inactive transition-all';
+            }
+        }
         document.getElementById('checkout-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('pay-btn');
-            const resultDiv = document.getElementById('result');
-            
+            const resDiv = document.getElementById('result');
             btn.disabled = true;
-            btn.innerText = "جاري إنشاء رابط الدفع...";
-
-            const orderId = document.getElementById('shopify_order_id').value;
-            const amount = document.getElementById('amount').value;
-
+            btn.innerText = 'Processing...';
             try {
                 const res = await fetch('/create-checkout-session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ shopify_order_id: orderId, amount: amount })
+                    body: JSON.stringify({
+                        shopify_order_id: document.getElementById('shopify_order_id').value,
+                        amount: document.getElementById('amount').value
+                    })
                 });
                 const data = await res.json();
-
                 if (data.url) {
                     window.location.href = data.url;
                 } else {
-                    resultDiv.classList.remove('hidden');
-                    resultDiv.innerHTML = `<span class="text-red-500 font-bold">خطأ: ${data.error || 'فشل إنشاء الجلسة'}</span>`;
+                    resDiv.classList.remove('hidden');
+                    resDiv.innerHTML = `<span class="text-red-400">Error: ${data.error || 'Failed'}</span>`;
                     btn.disabled = false;
-                    btn.innerText = "إنشاء رابط / QR الدفع عبر Stripe";
+                    btn.innerText = 'Generate Stripe Link';
                 }
             } catch (err) {
-                resultDiv.classList.remove('hidden');
-                resultDiv.innerHTML = `<span class="text-red-500 font-bold">حدث خطأ في الاتصال بالخادم</span>`;
+                resDiv.classList.remove('hidden');
+                resDiv.innerHTML = `<span class="text-red-400">Connection error</span>`;
                 btn.disabled = false;
-                btn.innerText = "إنشاء رابط / QR الدفع عبر Stripe";
+                btn.innerText = 'Generate Stripe Link';
             }
         });
     </script>
