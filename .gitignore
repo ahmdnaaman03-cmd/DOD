@@ -1,4 +1,6 @@
-.env
-env_production.txt
-*_backup.py
-*.bak
+paydod.db
+*.db
+*.bak_*
+*_backup*
+archive_old/
+.env*
