@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import sqlite3
 import pusher
 import os
@@ -29,23 +29,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-def update_shopify_order(order_id):
-    if not SHOPIFY_SHOP_URL or not SHOPIFY_ACCESS_TOKEN:
-        return False
-    
-    url = f"https://{SHOPIFY_SHOP_URL}/admin/api/2024-01/orders/{order_id}.json"
-    headers = {
-        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "order": {
-            "id": order_id,
-            "financial_status": "paid"
-        }
-    }
-    response = requests.put(url, json=payload, headers=headers)
-    return response.status_code == 200
+@app.route('/')
+def home():
+    return "PayDOD Server is Running Successfully! 🚀"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -53,16 +39,23 @@ def webhook():
     order_id = data.get('order_id') or data.get('id')
     
     if order_id:
-        update_shopify_order(order_id)
+        if SHOPIFY_SHOP_URL and SHOPIFY_ACCESS_TOKEN:
+            url = f"https://{SHOPIFY_SHOP_URL}/admin/api/2024-01/orders/{order_id}.json"
+            headers = {
+                "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+                "Content-Type": "application/json"
+            }
+            payload = {"order": {"id": order_id, "financial_status": "paid"}}
+            requests.put(url, json=payload, headers=headers)
         
         pusher_client.trigger('paydod-channel', 'payment-event', {
             'message': '✅ تم الدفع بنجاح',
             'order_id': order_id
         })
         
-        return jsonify({"status": "success", "message": "Shopify and Courier updated"}), 200
+        return jsonify({"status": "success"}), 200
         
-    return jsonify({"status": "error", "message": "Invalid data"}), 400
+    return jsonify({"status": "error"}), 400
 
 if __name__ == '__main__':
     init_db()
