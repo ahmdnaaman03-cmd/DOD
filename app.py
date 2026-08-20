@@ -23,8 +23,9 @@ SHOPIFY_ACCESS_TOKEN = os.getenv('SHOPIFY_ACCESS_TOKEN')
 def init_db():
     conn = sqlite3.connect('paydod.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS orders
-                 (id INTEGER PRIMARY KEY, status TEXT, order_id TEXT)''')
+    c.execute('DROP TABLE IF EXISTS orders')
+    c.execute('''CREATE TABLE orders
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT, order_id TEXT)''')
     conn.commit()
     conn.close()
 
