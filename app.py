@@ -5,12 +5,24 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-# Stripe Configuration
+# Stripe API Key
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_51P...')
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+@app.route('/support')
+def support():
+    return render_template('support.html')
 
 @app.route('/create-checkout-session', methods=['POST'])
 def create_checkout_session():
@@ -20,11 +32,9 @@ def create_checkout_session():
         amount_egp = float(data.get('amount', 0))
 
         if not order_id or amount_egp <= 0:
-            return jsonify({'error': 'Invalid order ID or amount'}), 400
+            return jsonify({'error': 'رقم الطلب أو المبلغ غير صحيح'}), 400
 
-        # Amount in cents/piasters for Stripe
         unit_amount = int(amount_egp * 100)
-
         domain = request.host_url.rstrip('/')
 
         session = stripe.checkout.Session.create(
@@ -40,8 +50,8 @@ def create_checkout_session():
                 'quantity': 1,
             }],
             mode='payment',
-            success_url=f'{domain}/mandoob/{order_id}',
-            cancel_url=f'{domain}/mandoob/{order_id}',
+            success_url=f'{domain}/?success=true',
+            cancel_url=f'{domain}/?canceled=true',
             metadata={'order_name': f'#{order_id}'}
         )
 
