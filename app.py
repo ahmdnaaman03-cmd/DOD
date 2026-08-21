@@ -6,7 +6,7 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
 # Stripe API Key
-stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', 'sk_test_51P...')
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 @app.route('/')
 def home():
