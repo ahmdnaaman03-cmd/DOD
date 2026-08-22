@@ -63,7 +63,7 @@ def create_checkout_session():
         print(f"Stripe Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/webhook/stripe', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def stripe_webhook():
     try:
         event = json.loads(request.get_data(as_text=True))
