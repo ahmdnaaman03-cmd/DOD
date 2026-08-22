@@ -3,119 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayDOD | Digital Payments</title>
+    <title>PayDOD | Digital Payment Orchestration</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <style>
-        body { background-color: #0b0f19; color: #ffffff; }
-        .text-gradient { background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .glass-card { background: rgba(17, 24, 39, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); }
+        body { background-color: #050b14; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
+        .text-gradient { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .glass-card { background: rgba(17, 24, 39, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); }
         .btn-primary { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); }
+        .hero-glow { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px; height: 400px; background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%); z-index: -1; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between p-4 font-sans antialiased">
+<body class="min-h-screen flex flex-col relative">
+    <div class="hero-glow"></div>
+    
+    <nav class="w-full p-5 flex justify-between items-center max-w-6xl mx-auto border-b border-gray-800/50">
+        <div class="text-2xl font-black tracking-tighter">Pay<span class="text-gradient">DOD</span></div>
+        <button id="langToggle" onclick="toggleLanguage()" class="px-4 py-1.5 text-xs font-bold border border-gray-700 rounded-full hover:bg-gray-800 transition">English</button>
+    </nav>
 
-    <!-- Header: Switch Lang Only -->
-    <div class="w-full flex justify-end max-w-md mx-auto pt-2">
-        <button id="langToggle" onclick="toggleLanguage()" class="px-3 py-1 text-xs border border-gray-800 hover:border-gray-600 rounded-lg bg-gray-900/60 text-gray-300 transition">
-            English
-        </button>
-    </div>
-
-    <!-- Main Form Box -->
-    <main class="flex-grow flex items-center justify-center py-6">
-        <div class="w-full max-w-md glass-card rounded-3xl p-8 shadow-2xl space-y-6">
-            
-            <!-- Logo in Center -->
-            <div class="text-center">
-                <h1 class="text-4xl font-black tracking-tight">Pay<span class="text-gradient">DOD</span></h1>
-                <p class="text-xs text-gray-400 mt-2" id="subtitle">توليد رابط دفع رقمي للطلب</p>
-            </div>
-
-            <!-- Form -->
-            <form id="payForm" class="space-y-4">
+    <main class="flex-grow flex flex-col items-center justify-center p-4 mt-8 md:mt-0">
+        <div class="text-center mb-10 max-w-2xl px-4">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-4 leading-tight" id="heroTitle">رقمنة مدفوعاتك لحظياً</h1>
+            <p class="text-gray-400 text-sm md:text-base leading-relaxed" id="heroSub">بوابة الدفع الوسيطة لشركات الشحن. حوّل الدفع عند الاستلام (COD) إلى دفع رقمي فوري، مع أتمتة تحديثات Shopify لحظياً.</p>
+        </div>
+        <div class="w-full max-w-md glass-card rounded-2xl p-6 md:p-8 shadow-2xl relative z-10">
+            <form id="payForm" class="space-y-5">
                 <div>
-                    <label class="block text-xs font-medium text-gray-300 mb-1.5" id="lblOrder">رقم الطلب</label>
-                    <input type="text" id="shopify_order_id" placeholder="1026" required class="w-full bg-gray-950/80 border border-gray-800 rounded-xl px-4 py-3 text-center text-base font-mono focus:outline-none focus:border-blue-500 text-white placeholder-gray-600 transition">
+                    <label class="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide" id="lblOrder">رقم طلب Shopify</label>
+                    <input type="text" id="shopify_order_id" placeholder="مثال: 1026" required class="w-full bg-gray-900/50 border border-gray-700/50 rounded-xl px-4 py-3.5 text-center text-lg font-mono focus:outline-none focus:border-blue-500 focus:bg-gray-900 text-white transition">
                 </div>
-
                 <div>
-                    <label class="block text-xs font-medium text-gray-300 mb-1.5" id="lblAmount">المبلغ (جنيه)</label>
-                    <input type="number" id="amount" placeholder="600" required class="w-full bg-gray-950/80 border border-gray-800 rounded-xl px-4 py-3 text-center text-base font-mono focus:outline-none focus:border-blue-500 text-white placeholder-gray-600 transition">
+                    <label class="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide" id="lblAmount">المبلغ (EGP)</label>
+                    <input type="number" id="amount" placeholder="600" required class="w-full bg-gray-900/50 border border-gray-700/50 rounded-xl px-4 py-3.5 text-center text-lg font-mono focus:outline-none focus:border-blue-500 focus:bg-gray-900 text-white transition">
                 </div>
-
-                <button type="submit" id="submitBtn" class="w-full btn-primary hover:opacity-90 font-bold py-3.5 px-4 rounded-xl transition shadow-lg text-white text-sm">
-                    توليد رابط الدفع
+                <button type="submit" id="submitBtn" class="w-full btn-primary hover:scale-[1.02] font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-900/20 text-white text-sm">
+                    إنشاء رابط الدفع الآمن
                 </button>
             </form>
-
-            <div id="statusBox" class="hidden p-4 rounded-xl border text-center text-sm font-medium break-all"></div>
+            <div id="statusBox" class="hidden mt-6 p-4 rounded-xl border text-center text-sm font-medium break-all transition-all"></div>
         </div>
     </main>
-
-    <!-- Professional Footer Links -->
-    <footer class="py-4 text-center text-xs text-gray-500 space-y-2">
-        <div class="flex justify-center space-x-4 space-x-reverse text-gray-400">
-            <a href="/privacy" class="hover:text-white transition">الخصوصية</a>
-            <span>•</span>
-            <a href="/terms" class="hover:text-white transition">الشروط والأحكام</a>
-            <span>•</span>
-            <a href="/support" class="hover:text-white transition">الدعم الفني</a>
-        </div>
-        <div>PayDOD Inc. &copy; 2026</div>
-    </footer>
     <script>
         let currentLang = 'ar';
         const i18n = {
-            ar: {
-                btnLang: 'English',
-                subtitle: 'توليد رابط دفع رقمي للطلب',
-                lblOrder: 'رقم الطلب',
-                lblAmount: 'المبلغ (جنيه)',
-                placeholderOrder: '1026',
-                placeholderAmount: '600',
-                btnSubmit: 'توليد رابط الدفع',
-                processing: 'جاري إنشاء الرابط...',
-                success: 'تم إنشاء الرابط:',
-                err: 'خطأ: '
-            },
-            en: {
-                btnLang: 'العربية',
-                subtitle: 'Generate Digital Payment Link',
-                lblOrder: 'Order ID',
-                lblAmount: 'Amount (EGP)',
-                placeholderOrder: '1026',
-                placeholderAmount: '600',
-                btnSubmit: 'Generate Payment Link',
-                processing: 'Creating link...',
-                success: 'Link Created:',
-                err: 'Error: '
-            }
+            ar: { btnLang: 'English', heroTitle: 'رقمنة مدفوعاتك لحظياً', heroSub: 'بوابة الدفع الوسيطة لشركات الشحن. حوّل الدفع عند الاستلام (COD) إلى دفع رقمي فوري، مع أتمتة تحديثات Shopify لحظياً.', lblOrder: 'رقم طلب Shopify', lblAmount: 'المبلغ (EGP)', placeholderOrder: 'مثال: 1026', btnSubmit: 'إنشاء رابط الدفع الآمن', processing: 'جاري المعالجة...', success: 'تم إنشاء الرابط:', paid: '✅ تمت عملية الدفع بنجاح! تم تحديث Shopify.', err: 'خطأ: ' },
+            en: { btnLang: 'العربية', heroTitle: 'Instant Digital Payments', heroSub: 'The middleware payment gateway for logistics. Convert COD to instant digital payments with real-time Shopify automation.', lblOrder: 'Shopify Order ID', lblAmount: 'Amount (EGP)', placeholderOrder: 'e.g. 1026', btnSubmit: 'Generate Secure Link', processing: 'Processing...', success: 'Link Generated:', paid: '✅ Payment Successful! Shopify Updated.', err: 'Error: ' }
         };
 
         function toggleLanguage() {
             currentLang = currentLang === 'ar' ? 'en' : 'ar';
-            const htmlTag = document.getElementById('htmlTag');
-            htmlTag.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
-            htmlTag.lang = currentLang;
-
+            const html = document.getElementById('htmlTag');
+            html.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+            html.lang = currentLang;
             document.getElementById('langToggle').innerText = i18n[currentLang].btnLang;
-            document.getElementById('subtitle').innerText = i18n[currentLang].subtitle;
+            document.getElementById('heroTitle').innerText = i18n[currentLang].heroTitle;
+            document.getElementById('heroSub').innerText = i18n[currentLang].heroSub;
             document.getElementById('lblOrder').innerText = i18n[currentLang].lblOrder;
             document.getElementById('lblAmount').innerText = i18n[currentLang].lblAmount;
             document.getElementById('shopify_order_id').placeholder = i18n[currentLang].placeholderOrder;
-            document.getElementById('amount').placeholder = i18n[currentLang].placeholderAmount;
             document.getElementById('submitBtn').innerText = i18n[currentLang].btnSubmit;
         }
+    </script>
+    <script>
         document.getElementById('payForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('submitBtn');
             const statusBox = document.getElementById('statusBox');
-            const orderId = document.getElementById('shopify_order_id').value;
+            const orderId = document.getElementById('shopify_order_id').value.trim();
             const amount = document.getElementById('amount').value;
 
             btn.disabled = true;
             btn.innerText = i18n[currentLang].processing;
-            statusBox.className = 'p-3 rounded-xl border text-center text-xs font-medium bg-gray-900 border-gray-800 text-gray-300';
+            statusBox.className = 'mt-6 p-4 rounded-xl border text-center text-sm font-medium bg-gray-900 border-gray-700 text-gray-300';
             statusBox.innerText = i18n[currentLang].processing;
             statusBox.classList.remove('hidden');
 
@@ -125,23 +85,42 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ shopify_order_id: orderId, amount: amount })
                 });
-
                 const data = await res.json();
 
-                if (res.ok && (data.checkout_url || data.url)) {
-                    const url = data.checkout_url || data.url;
-                    statusBox.className = 'p-3 rounded-xl border text-center text-xs font-medium bg-green-950/60 border-green-800 text-green-300';
-                    statusBox.innerHTML = `${i18n[currentLang].success}<br><a href="${url}" target="_blank" class="text-blue-400 font-bold underline mt-1 inline-block break-all">${url}</a>`;
+                if (res.ok && data.checkout_url) {
+                    statusBox.className = 'mt-6 p-4 rounded-xl border text-center text-sm font-medium bg-blue-900/20 border-blue-800 text-blue-300';
+                    statusBox.innerHTML = `${i18n[currentLang].success}<br><a href="${data.checkout_url}" target="_blank" class="text-blue-400 font-bold underline mt-2 inline-block break-all">${data.checkout_url}</a>`;
                 } else {
-                    statusBox.className = 'p-3 rounded-xl border text-center text-xs font-medium bg-red-950/60 border-red-800 text-red-300';
+                    statusBox.className = 'mt-6 p-4 rounded-xl border text-center text-sm font-medium bg-red-900/20 border-red-800 text-red-300';
                     statusBox.innerText = i18n[currentLang].err + (data.error || 'Server error');
                 }
             } catch (err) {
-                statusBox.className = 'p-3 rounded-xl border text-center text-xs font-medium bg-red-950/60 border-red-800 text-red-300';
+                statusBox.className = 'mt-6 p-4 rounded-xl border text-center text-sm font-medium bg-red-900/20 border-red-800 text-red-300';
                 statusBox.innerText = i18n[currentLang].err + 'Network failure';
             } finally {
                 btn.disabled = false;
                 btn.innerText = i18n[currentLang].btnSubmit;
+            }
+        });
+    </script>
+    <footer class="py-6 text-center text-xs text-gray-600 mt-auto">
+        <div class="space-x-4 space-x-reverse mb-2">
+            <a href="/privacy" class="hover:text-gray-300 transition">Privacy</a> <span>•</span>
+            <a href="/terms" class="hover:text-gray-300 transition">Terms</a>
+        </div>
+        <div>PayDOD &copy; 2026. All rights reserved.</div>
+    </footer>
+
+    <script>
+        const pusher = new Pusher('a5ec1cf1360ed0c1f641', { cluster: 'eu' });
+        const channel = pusher.subscribe('paydod-channel');
+        
+        channel.bind('payment-success', function(data) {
+            const currentOrder = document.getElementById('shopify_order_id').value.trim().replace('#', '');
+            if (data.order_id === currentOrder) {
+                const statusBox = document.getElementById('statusBox');
+                statusBox.className = 'mt-6 p-5 rounded-xl border-2 text-center text-base font-black bg-green-900/30 border-green-500 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.3)] transform scale-105 transition-all duration-300';
+                statusBox.innerText = i18n[currentLang].paid;
             }
         });
     </script>
